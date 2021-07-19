@@ -1,3 +1,4 @@
+#pragma once
 #include <memory>
 
 template <typename Fn>
