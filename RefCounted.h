@@ -44,7 +44,7 @@ public:
         return *_t;
     }
     
-    operator bool() const { return (bool)_t; }
+    bool hasValue() const { return _t.has_value(); }
     
     void reset() {
         if (_t) {
