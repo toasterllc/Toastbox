@@ -1,7 +1,7 @@
 #pragma once
 #include <sstream>
 
-static std::string _RuntimeErrorFmtMsg(const char* str) {
+std::string _RuntimeErrorFmtMsg(const char* str) {
     char msg[256];
     int sr = snprintf(msg, sizeof(msg), "%s", str);
     if (sr<0 || (size_t)sr>=(sizeof(msg)-1)) throw std::runtime_error("failed to create RuntimeError");
@@ -9,7 +9,7 @@ static std::string _RuntimeErrorFmtMsg(const char* str) {
 }
 
 template <typename ...Args>
-static std::string _RuntimeErrorFmtMsg(const char* fmt, Args ...args) {
+std::string _RuntimeErrorFmtMsg(const char* fmt, Args ...args) {
     char msg[256];
     int sr = snprintf(msg, sizeof(msg), fmt, args...);
     if (sr<0 || (size_t)sr>=(sizeof(msg)-1)) throw std::runtime_error("failed to create RuntimeError");
