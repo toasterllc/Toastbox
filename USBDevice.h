@@ -508,6 +508,8 @@ private:
         _CheckErr(ir, "libusb_clear_halt failed");
     }
     
+    operator libusb_device*() const { return _dev; }
+    
 private:
     struct _EndpointInfo {
         bool valid = false;
