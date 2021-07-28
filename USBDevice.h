@@ -276,6 +276,24 @@ public:
         return desc;
     }
     
+    USB::ConfigurationDescriptor configurationDescriptor(uint8_t idx) const {
+        using namespace Endian;
+        IOUSBConfigurationDescriptorPtr descPtr = nullptr;
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::GetConfigurationDescriptorPtr>(idx, &descPtr);
+        _CheckErr(ior, "GetConfigurationDescriptorPtr failed");
+        if (!descPtr) throw RuntimeError("GetConfigurationDescriptorPtr returned null");
+        return USB::ConfigurationDescriptor{
+            .bLength                 = HFL(descPtr->bLength),
+            .bDescriptorType         = HFL(descPtr->bDescriptorType),
+            .wTotalLength            = HFL(descPtr->wTotalLength),
+            .bNumInterfaces          = HFL(descPtr->bNumInterfaces),
+            .bConfigurationValue     = HFL(descPtr->bConfigurationValue),
+            .iConfiguration          = HFL(descPtr->iConfiguration),
+            .bmAttributes            = HFL(descPtr->bmAttributes),
+            .bMaxPower               = HFL(descPtr->MaxPower), // `MaxPower`: typo or intentional indication of unit change?
+        };
+    }
+    
     template <typename... Args>
     void read(uint8_t epAddr, Args... args) {
         const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
@@ -370,7 +388,7 @@ private:
         {
             struct libusb_config_descriptor* configDesc = nullptr;
             int ir = libusb_get_config_descriptor(_dev, 0, &configDesc);
-            _CheckErr(ir, "libusb_config_descriptor failed");
+            _CheckErr(ir, "libusb_get_config_descriptor failed");
             
             for (uint8_t ifaceIdx=0; ifaceIdx<configDesc->bNumInterfaces; ifaceIdx++) {
                 const struct libusb_interface& iface = configDesc->interface[ifaceIdx];
@@ -414,6 +432,22 @@ private:
             .iProduct               = desc.iProduct,
             .iSerialNumber          = desc.iSerialNumber,
             .bNumConfigurations     = desc.bNumConfigurations,
+        };
+    }
+    
+    USB::ConfigurationDescriptor configurationDescriptor(uint8_t idx) const {
+        struct libusb_config_descriptor* desc;
+        int ir = libusb_get_config_descriptor(_dev, idx, &desc);
+        _CheckErr(ir, "libusb_get_config_descriptor failed");
+        return USB::ConfigurationDescriptor{
+            .bLength                 = desc->bLength,
+            .bDescriptorType         = desc->bDescriptorType,
+            .wTotalLength            = desc->wTotalLength,
+            .bNumInterfaces          = desc->bNumInterfaces,
+            .bConfigurationValue     = desc->bConfigurationValue,
+            .iConfiguration          = desc->iConfiguration,
+            .bmAttributes            = desc->bmAttributes,
+            .bMaxPower               = desc->MaxPower, // `MaxPower`: typo or intentional indication of unit change?
         };
     }
     
