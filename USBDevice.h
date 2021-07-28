@@ -230,9 +230,11 @@ public:
                     const bool dirOut = props.bDirection==kUSBOut;
                     const uint8_t epAddr = (dirOut ? USB::Endpoint::DirOut : USB::Endpoint::DirIn)|props.bEndpointNumber;
                     _epInfos[_OffsetForEndpointAddr(epAddr)] = {
-                        .epAddr = epAddr,
-                        .ifaceIdx = (uint8_t)(_interfaces.size()-1),
-                        .pipeRef = pipeRef,
+                        .valid          = true,
+                        .epAddr         = epAddr,
+                        .ifaceIdx       = (uint8_t)(_interfaces.size()-1),
+                        .pipeRef        = pipeRef,
+                        .maxPacketSize  = props.wMaxPacketSize,
                     };
                 }
             }
@@ -294,28 +296,30 @@ public:
         };
     }
     
+    uint16_t maxPacketSize(uint8_t epAddr) const {
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
+        return epInfo.maxPacketSize;
+    }
+    
     template <typename... Args>
     void read(uint8_t epAddr, Args... args) {
-        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        const uint8_t pipeRef = _epInfos[_OffsetForEndpointAddr(epAddr)].pipeRef;
-        iface.read(pipeRef, args...);
+        iface.read(epInfo.pipeRef, args...);
     }
     
     template <typename... Args>
     void write(uint8_t epAddr, Args... args) {
-        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        const uint8_t pipeRef = _epInfos[_OffsetForEndpointAddr(epAddr)].pipeRef;
-        iface.write(pipeRef, args...);
+        iface.write(epInfo.pipeRef, args...);
     }
     
     template <typename... Args>
     void reset(uint8_t epAddr, Args... args) {
-        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        const uint8_t pipeRef = _epInfos[_OffsetForEndpointAddr(epAddr)].pipeRef;
-        iface.reset(pipeRef, args...);
+        iface.reset(epInfo.pipeRef, args...);
     }
     
 //    void vendorRequestOut(uint8_t req, void* data, size_t len) {
@@ -334,9 +338,11 @@ public:
     
 private:
     struct _EndpointInfo {
+        bool valid = false;
         uint8_t epAddr = 0;
         uint8_t ifaceIdx = 0;
         uint8_t pipeRef = 0;
+        uint16_t maxPacketSize = 0;
     };
     
     static uint8_t _OffsetForEndpointAddr(uint8_t epAddr) {
@@ -345,6 +351,12 @@ private:
     
     static void _CheckErr(IOReturn ior, const char* errMsg) {
         if (ior != kIOReturnSuccess) throw RuntimeError("%s: %s", errMsg, mach_error_string(ior));
+    }
+    
+    const _EndpointInfo& _epInfo(uint8_t epAddr) const {
+        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        if (!epInfo.valid) throw RuntimeError("invalid endpoint address: 0x%02x", epAddr);
+        return epInfo;
     }
     
 //    _Interface& _interfaceForEndpointAddr(uint8_t epAddr) {
@@ -404,8 +416,10 @@ private:
                     const struct libusb_endpoint_descriptor& endpointDesc = ifaceDesc.endpoint[epIdx];
                     const uint8_t epAddr = endpointDesc.bEndpointAddress;
                     _epInfos[_OffsetForEndpointAddr(epAddr)] = _EndpointInfo{
-                        .epAddr     = epAddr,
-                        .ifaceIdx   = ifaceIdx,
+                        .valid          = true,
+                        .epAddr         = epAddr,
+                        .ifaceIdx       = ifaceIdx,
+                        .maxPacketSize  = endpointDesc.wMaxPacketSize,
                     };
                 }
             }
@@ -451,6 +465,11 @@ private:
         };
     }
     
+    uint16_t maxPacketSize(uint8_t epAddr) const {
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
+        return epInfo.maxPacketSize;
+    }
+    
     template <typename T>
     void read(uint8_t epAddr, T& t, Milliseconds timeout=Forever) {
         read(epAddr, (void*)&t, sizeof(t), timeout);
@@ -491,8 +510,10 @@ private:
     
 private:
     struct _EndpointInfo {
+        bool valid = false;
         uint8_t epAddr = 0;
         uint8_t ifaceIdx = 0;
+        uint16_t maxPacketSize = 0;
     };
     
     static libusb_context* _USBCtx() {
@@ -527,13 +548,19 @@ private:
     
     void _claimInterfaceForEndpointAddr(uint8_t epAddr) {
         _openIfNeeded();
-        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         if (!iface.claimed) {
             int ir = libusb_claim_interface(_devHandle, iface.bInterfaceNumber);
             _CheckErr(ir, "libusb_claim_interface failed");
             iface.claimed = true;
         }
+    }
+    
+    const _EndpointInfo& _epInfo(uint8_t epAddr) const {
+        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        if (!epInfo.valid) throw RuntimeError("invalid endpoint address: 0x%02x", epAddr);
+        return epInfo;
     }
     
     libusb_device* _dev = nullptr;
