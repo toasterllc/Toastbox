@@ -137,12 +137,12 @@ private:
     
 #endif
     
-    
 public:
     
-    // Copying illegal/move OK
+    // Copy: illegal
     USBDevice(const USBDevice& x) = delete;
     USBDevice& operator=(const USBDevice& x) = delete;
+    // Move: OK
     USBDevice(USBDevice&& x) = default;
     USBDevice& operator=(USBDevice&& x) = default;
     
@@ -322,19 +322,19 @@ public:
         iface.reset(epInfo.pipeRef, args...);
     }
     
-//    void vendorRequestOut(uint8_t req, void* data, size_t len) {
-////        _openIfNeeded();
-//        
-//        IOUSBDevRequest usbReq = {
-//            .bmRequestType  = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
-//            .bRequest       = req,
-//            .pData          = data,
-//            .wLength        = (uint16_t)len
-//        };
-//        
-//        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
-//        _CheckErr(ior, "DeviceRequest failed");
-//    }
+    void vendorRequest(uint8_t req, void* data, size_t len) {
+        IOUSBDevRequest usbReq = {
+            .bmRequestType  = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
+            .bRequest       = req,
+            .pData          = data,
+            .wLength        = (uint16_t)len
+        };
+        
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
+        _CheckErr(ior, "DeviceRequest failed");
+    }
+    
+    SendRight& service() { return _service; }
     
 private:
     struct _EndpointInfo {
@@ -506,6 +506,21 @@ private:
         _claimInterfaceForEndpointAddr(epAddr);
         int ir = libusb_clear_halt(_devHandle, epAddr);
         _CheckErr(ir, "libusb_clear_halt failed");
+    }
+    
+    void vendorRequest(uint8_t req, void* data, size_t len, Milliseconds timeout=Forever) {
+        _openIfNeeded();
+        
+        const uint8_t bmRequestType =
+            USB::RequestType::DirectionOut      |
+            USB::RequestType::TypeVendor        |
+            USB::RequestType::RecipientDevice   ;
+        const uint8_t bRequest = req;
+        const uint8_t wValue = 0;
+        const uint8_t wIndex = 0;
+        int ir = libusb_control_transfer(_devHandle, bmRequestType, bRequest, wValue, wIndex,
+            (uint8_t*)data, len, _LibUSBTimeoutFromMs(timeout));
+        _CheckErr(ir, "libusb_control_transfer failed");
     }
     
     operator libusb_device*() const { return _dev; }

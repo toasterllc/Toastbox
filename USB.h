@@ -38,8 +38,8 @@ namespace Request {
 
 // Request Type (bmRequestType)
 namespace RequestType {
-    static constexpr uint8_t DirectionHostToDevice      = 0x00;
-    static constexpr uint8_t DirectionDeviceToHost      = 0x80;
+    static constexpr uint8_t DirectionOut               = 0x00;
+    static constexpr uint8_t DirectionIn                = 0x80;
     static constexpr uint8_t DirectionMask              = 0x80;
     
     static constexpr uint8_t TypeStandard               = 0x00;
