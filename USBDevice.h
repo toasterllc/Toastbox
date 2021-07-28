@@ -40,15 +40,15 @@ private:
     class _Interface {
     public:
         template <auto Fn, typename... Args>
-        auto iokitExec(Args... args) const {
+        auto iokitExec(Args&&... args) const {
             assert(_iokitInterface);
-            return ((*_iokitInterface)->*Fn)(_iokitInterface, args...);
+            return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
         }
         
         template <auto Fn, typename... Args>
-        auto iokitExec(Args... args) {
+        auto iokitExec(Args&&... args) {
             assert(_iokitInterface);
-            return ((*_iokitInterface)->*Fn)(_iokitInterface, args...);
+            return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
         }
         
         _Interface(SendRight&& service) {
@@ -166,15 +166,15 @@ public:
     }
     
     template <auto Fn, typename... Args>
-    auto iokitExec(Args... args) const {
+    auto iokitExec(Args&&... args) const {
         assert(_iokitInterface);
-        return ((*_iokitInterface)->*Fn)(_iokitInterface, args...);
+        return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
     }
     
     template <auto Fn, typename... Args>
-    auto iokitExec(Args... args) {
+    auto iokitExec(Args&&... args) {
         assert(_iokitInterface);
-        return ((*_iokitInterface)->*Fn)(_iokitInterface, args...);
+        return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
     }
     
     USBDevice(const SendRight& service) : _service(service) {
@@ -302,24 +302,24 @@ public:
     }
     
     template <typename... Args>
-    void read(uint8_t epAddr, Args... args) {
+    void read(uint8_t epAddr, Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.read(epInfo.pipeRef, args...);
+        iface.read(epInfo.pipeRef, std::forward<Args>(args)...);
     }
     
     template <typename... Args>
-    void write(uint8_t epAddr, Args... args) {
+    void write(uint8_t epAddr, Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.write(epInfo.pipeRef, args...);
+        iface.write(epInfo.pipeRef, std::forward<Args>(args)...);
     }
     
     template <typename... Args>
-    void reset(uint8_t epAddr, Args... args) {
+    void reset(uint8_t epAddr, Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.reset(epInfo.pipeRef, args...);
+        iface.reset(epInfo.pipeRef, std::forward<Args>(args)...);
     }
     
     void vendorRequest(uint8_t req, void* data, size_t len) {
