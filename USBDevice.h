@@ -78,6 +78,7 @@ private:
             read(pipeRef, (void*)&t, sizeof(t), timeout);
         }
         
+        #warning TODO: loop until the requested data is received
         void read(uint8_t pipeRef, void* buf, size_t len, Milliseconds timeout=Forever) {
             _openIfNeeded();
             uint32_t len32 = (uint32_t)len;
@@ -475,6 +476,7 @@ private:
         read(epAddr, (void*)&t, sizeof(t), timeout);
     }
     
+    #warning TODO: loop until `len` data is received
     void read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
         _claimInterfaceForEndpointAddr(epAddr);
         
