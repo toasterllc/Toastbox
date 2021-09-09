@@ -78,7 +78,7 @@ private:
             read(pipeRef, (void*)&t, sizeof(t), timeout);
         }
         
-        #warning TODO: loop until the requested data is received
+        #warning TODO: loop if ior==interrupted
         void read(uint8_t pipeRef, void* buf, size_t len, Milliseconds timeout=Forever) {
             _openIfNeeded();
             uint32_t len32 = (uint32_t)len;
@@ -323,15 +323,22 @@ public:
         iface.reset(epInfo.pipeRef, std::forward<Args>(args)...);
     }
     
-    void vendorRequest(uint8_t req, void* data, size_t len) {
-        IOUSBDevRequest usbReq = {
-            .bmRequestType  = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
-            .bRequest       = req,
-            .pData          = data,
-            .wLength        = (uint16_t)len
+    template <typename T>
+    void vendorRequestOut(uint8_t req, T& x, Milliseconds timeout=Forever) {
+        vendorRequestOut(req, (void*)&x, sizeof(x), timeout);
+    }
+    
+    void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
+        IOUSBDevRequestTO usbReq = {
+            .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
+            .bRequest           = req,
+            .pData              = (void*)data,
+            .wLength            = (uint16_t)len,
+            .noDataTimeout      = (uint32_t)0,
+            .completionTimeout  = (uint32_t)timeout.count(),
         };
         
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequestTO>(&usbReq);
         _CheckErr(ior, "DeviceRequest failed");
     }
     
@@ -510,7 +517,12 @@ private:
         _CheckErr(ir, "libusb_clear_halt failed");
     }
     
-    void vendorRequest(uint8_t req, void* data, size_t len, Milliseconds timeout=Forever) {
+    template <typename T>
+    void vendorRequestOut(uint8_t req, T& x, Milliseconds timeout=Forever) {
+        vendorRequestOut(req, (void*)&x, sizeof(x), timeout);
+    }
+    
+    void vendorRequestOut(uint8_t req, void* data, size_t len, Milliseconds timeout=Forever) {
         _openIfNeeded();
         
         const uint8_t bmRequestType =
