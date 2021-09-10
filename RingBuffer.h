@@ -41,8 +41,37 @@ public:
         if (len) _full = false;
     }
     
+    T read() {
+        T t;
+        read(&t, 1);
+        return t;
+    }
+    
+    template <bool Overwrite>
     void write(const T* data, size_t len) {
-        assert(len <= space());
+        if constexpr (!Overwrite) {
+            assert(len <= space());
+        } else {
+            // Overwriting is allowed
+            
+            // Check if we're writing more elements than our capacity.
+            // If so, only write the trailing `Cap` elements.
+            if (len > Cap) {
+                data += len-Cap;
+                len = Cap;
+            }
+            
+            // Update _roff according to the amount of data being overwritten
+            const size_t avail = space();
+            if (len > avail) {
+                const size_t overflow = len-avail;
+                if (overflow < Cap-_roff) {
+                    _roff += overflow;
+                } else {
+                    _roff = overflow-(Cap-_roff);
+                }
+            }
+        }
         
         // Write segment 1 (_woff to end)
         size_t rem = len;
@@ -64,6 +93,11 @@ public:
         // If we wrote until _woff==_roff, then we're full
         if (len && _woff==_roff) _full = true;
     }
+    
+    void write(const T* data, size_t len)       { write<false>(data, len);  }
+    void write(T t)                             { write<false>(&t, 1);      }
+    void writeOver(const T* data, size_t len)   { write<true>(data, len);   }
+    void writeOver(T t)                         { write<true>(&t, 1);       }
     
 private:
     size_t _roff = 0;
