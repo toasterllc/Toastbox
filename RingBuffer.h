@@ -1,5 +1,5 @@
 #pragma once
-#include <cassert>
+#include <cstdlib>
 #include <algorithm>
 
 template <typename T, size_t Cap>
@@ -18,7 +18,8 @@ public:
     }
     
     void read(T* data, size_t len) {
-        assert(len <= this->len());
+        // Not using assert() so we can use this on STM32
+        if (len > this->len()) abort();
         
         // Read segment 1 (_roff to end)
         size_t rem = len;
@@ -50,7 +51,8 @@ public:
     template <bool Overwrite>
     void write(const T* data, size_t len) {
         if constexpr (!Overwrite) {
-            assert(len <= space());
+            // Not using assert() so we can use this on STM32
+            if (len > space()) abort();
         } else {
             // Overwriting is allowed
             
