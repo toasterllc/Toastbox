@@ -46,9 +46,12 @@ private:
         }
         
         template <auto Fn, typename... Args>
-        auto iokitExec(Args&&... args) {
+        IOReturn iokitExec(Args&&... args) {
             assert(_iokitInterface);
-            return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+            IOReturn ior = kIOReturnSuccess;
+            do ior = ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+            while (ior == kIOReturnAborted);
+            return ior;
         }
         
         _Interface(SendRight&& service) {
@@ -75,11 +78,12 @@ private:
         
         template <typename T>
         void read(uint8_t pipeRef, T& t, Milliseconds timeout=Forever) {
-            read(pipeRef, (void*)&t, sizeof(t), timeout);
+            const size_t len = read(pipeRef, (void*)&t, sizeof(t), timeout);
+            if (len != sizeof(t)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
+                (uintmax_t)sizeof(t), (uintmax_t)len);
         }
         
-        #warning TODO: loop if ior==interrupted
-        void read(uint8_t pipeRef, void* buf, size_t len, Milliseconds timeout=Forever) {
+        size_t read(uint8_t pipeRef, void* buf, size_t len, Milliseconds timeout=Forever) {
             _openIfNeeded();
             uint32_t len32 = (uint32_t)len;
             if (timeout == Forever) {
@@ -89,9 +93,7 @@ private:
                 IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ReadPipeTO>(pipeRef, buf, &len32, 0, (uint32_t)timeout.count());
                 _CheckErr(ior, "ReadPipeTO failed");
             }
-            
-            if (len32 != len) throw RuntimeError("ReadPipe() returned bad length (expected %ju bytes, got %ju bytes)",
-                (uintmax_t)len, (uintmax_t)len32);
+            return len32;
         }
         
         template <typename T>
@@ -303,10 +305,10 @@ public:
     }
     
     template <typename... Args>
-    void read(uint8_t epAddr, Args&&... args) {
+    auto read(uint8_t epAddr, Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.read(epInfo.pipeRef, std::forward<Args>(args)...);
+        return iface.read(epInfo.pipeRef, std::forward<Args>(args)...);
     }
     
     template <typename... Args>
@@ -480,19 +482,19 @@ private:
     
     template <typename T>
     void read(uint8_t epAddr, T& t, Milliseconds timeout=Forever) {
-        read(epAddr, (void*)&t, sizeof(t), timeout);
+        const size_t len = read(epAddr, (void*)&t, sizeof(t), timeout);
+        if (len != sizeof(t)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
+            (uintmax_t)sizeof(t), (uintmax_t)len);
     }
     
-    #warning TODO: loop until `len` data is received
-    void read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
+    #warning TODO: loop if ior==interrupted
+    size_t read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
         _claimInterfaceForEndpointAddr(epAddr);
-        
         int xferLen = 0;
         int ir = libusb_bulk_transfer(_devHandle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
             _LibUSBTimeoutFromMs(timeout));
         _CheckErr(ir, "libusb_bulk_transfer failed");
-        if ((size_t)xferLen != len)
-            throw RuntimeError("libusb_bulk_transfer short read (tried: %zu, got: %zu)", len, (size_t)xferLen);
+        return ir;
     }
     
     template <typename T>
