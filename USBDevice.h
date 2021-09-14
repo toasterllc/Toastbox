@@ -40,18 +40,21 @@ private:
     class _Interface {
     public:
         template <auto Fn, typename... Args>
-        auto iokitExec(Args&&... args) const {
+        IOReturn iokitExec(Args&&... args) const {
             assert(_iokitInterface);
-            return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+            for (;;) {
+                const IOReturn ior = ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+                if (ior != kIOReturnAborted) return ior;
+            }
         }
         
         template <auto Fn, typename... Args>
         IOReturn iokitExec(Args&&... args) {
             assert(_iokitInterface);
-            IOReturn ior = kIOReturnSuccess;
-            do ior = ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
-            while (ior == kIOReturnAborted);
-            return ior;
+            for (;;) {
+                const IOReturn ior = ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+                if (ior != kIOReturnAborted) return ior;
+            }
         }
         
         _Interface(SendRight&& service) {
@@ -169,15 +172,21 @@ public:
     }
     
     template <auto Fn, typename... Args>
-    auto iokitExec(Args&&... args) const {
+    IOReturn iokitExec(Args&&... args) const {
         assert(_iokitInterface);
-        return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+        for (;;) {
+            const IOReturn ior = ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+            if (ior != kIOReturnAborted) return ior;
+        }
     }
     
     template <auto Fn, typename... Args>
-    auto iokitExec(Args&&... args) {
+    IOReturn iokitExec(Args&&... args) {
         assert(_iokitInterface);
-        return ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+        for (;;) {
+            const IOReturn ior = ((*_iokitInterface)->*Fn)(_iokitInterface, std::forward<Args>(args)...);
+            if (ior != kIOReturnAborted) return ior;
+        }
     }
     
     USBDevice(const SendRight& service) : _service(service) {
