@@ -88,8 +88,8 @@ struct DeviceDescriptor {
 } __attribute__((packed));
 
 namespace ConfigurationCharacteristics {
-    static constexpr uint8_t RemoteWakeup   = 1<<5;
-    static constexpr uint8_t SelfPowered    = 1<<6;
+    static constexpr uint8_t RemoteWakeup               = 1<<5;
+    static constexpr uint8_t SelfPowered                = 1<<6;
 };
 
 struct ConfigurationDescriptor {
@@ -191,15 +191,15 @@ namespace USB::CDC {
 // Version 1.1
 
 namespace Request {
-    static constexpr uint8_t SEND_ENCAPSULATED_COMMAND   = 0x00;
-    static constexpr uint8_t GET_ENCAPSULATED_RESPONSE   = 0x01;
-    static constexpr uint8_t SET_COMM_FEATURE            = 0x02;
-    static constexpr uint8_t GET_COMM_FEATURE            = 0x03;
-    static constexpr uint8_t CLEAR_COMM_FEATURE          = 0x04;
-    static constexpr uint8_t SET_LINE_CODING             = 0x20;
-    static constexpr uint8_t GET_LINE_CODING             = 0x21;
-    static constexpr uint8_t SET_CONTROL_LINE_STATE      = 0x22;
-    static constexpr uint8_t SEND_BREAK                  = 0x23;
+    static constexpr uint8_t SEND_ENCAPSULATED_COMMAND  = 0x00;
+    static constexpr uint8_t GET_ENCAPSULATED_RESPONSE  = 0x01;
+    static constexpr uint8_t SET_COMM_FEATURE           = 0x02;
+    static constexpr uint8_t GET_COMM_FEATURE           = 0x03;
+    static constexpr uint8_t CLEAR_COMM_FEATURE         = 0x04;
+    static constexpr uint8_t SET_LINE_CODING            = 0x20;
+    static constexpr uint8_t GET_LINE_CODING            = 0x21;
+    static constexpr uint8_t SET_CONTROL_LINE_STATE     = 0x22;
+    static constexpr uint8_t SEND_BREAK                 = 0x23;
 };
 
 struct HeaderFunctionalDescriptor {
