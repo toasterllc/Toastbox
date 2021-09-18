@@ -64,6 +64,10 @@ public:
         return irq;
     }
     
+    IRQState()                  = default;
+    IRQState(const IRQState& x) = delete;
+    IRQState(IRQState&& x)      = default;
+    
     ~IRQState() {
         restore();
     }
