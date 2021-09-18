@@ -100,6 +100,9 @@ private:
 
 class Task {
 public:
+    // Functions provided by client
+    static uint32_t TimeMs();
+    
     enum class State {
         Run,
         Wait,
@@ -108,20 +111,39 @@ public:
     
     using TaskFn = std::function<void(Task& task)>;
     
-    // Functions provided by client
-    static uint32_t TimeMs();
-    
-    Task(TaskFn fn) {
-        _fn = fn;
+    template <typename ...Tasks>
+    static void Run(Tasks&... ts) {
+        const std::reference_wrapper<Task> tasks[] = { static_cast<Task&>(ts)... };
+        for (;;) {
+            IRQState irq = IRQState::Disabled();
+            // Execute every task
+            bool didWork = false;
+            for (Task& task : tasks) {
+                didWork |= task.run();
+            }
+            // If no task performed work, go to sleep
+            if (!didWork) IRQState::WaitForInterrupt();
+        }
     }
+    
+    Task(TaskFn fn) : _fn(fn) {}
     
     void reset() {
         _state = State::Run;
         _jmp = nullptr;
     }
     
-    void run() {
-        _fn(*this);
+    bool run() {
+        _didWork = false;
+        switch (_state) {
+        case State::Run:
+        case State::Wait:
+            _fn(*this);
+            break;
+        default:
+            break;
+        }
+        return _didWork;
     }
     
     bool _sleepDone() const {
@@ -134,43 +156,6 @@ public:
     void* _jmp = nullptr;
     uint32_t _sleepStartMs = 0;
     uint32_t _sleepDurationMs = 0;
-};
-
-template <typename... Tasks>
-class TaskScheduler {
-public:
-    TaskScheduler(Tasks&... tasks) : _tasks{tasks...} {}
-    
-    void run() {
-        for (;;) {
-            IRQState irq = IRQState::Disabled();
-            // Execute every task
-            bool didWork = false;
-            std::apply([&](auto&... t) {
-                (_runTask(didWork, t), ...);
-            }, _tasks);
-            
-            // If no task performed work, go to sleep
-            if (!didWork) IRQState::WaitForInterrupt();
-        }
-    }
-    
-private:
-    template <typename T>
-    static void _runTask(bool& didWork, T& task) {
-        task._didWork = false;
-        switch (task._state) {
-        case Task::State::Run:
-        case Task::State::Wait:
-            task.run();
-            break;
-        default:
-            break;
-        }
-        didWork |= task._didWork;
-    }
-    
-    std::tuple<Tasks&...> _tasks;
 };
 
 template <typename T, size_t N>
@@ -200,14 +185,27 @@ public:
     
     T read() {
         IRQState irq = IRQState::Disabled();
-        if (!_readable()) return ReadResult();
+        _Assert(_readable());
         return _read();
     }
     
     void write(const T& x) {
         IRQState irq = IRQState::Disabled();
-        if (!_writeable()) return;
+        _Assert(_writeable());
         _write(x);
+    }
+    
+    ReadResult readTry() {
+        IRQState irq = IRQState::Disabled();
+        if (!_readable()) return {};
+        return _read();
+    }
+    
+    bool writeTry(const T& x) {
+        IRQState irq = IRQState::Disabled();
+        if (!_writeable()) return false;
+        _write(x);
+        return true;
     }
     
     void reset() {
@@ -217,8 +215,10 @@ public:
     }
     
 private:
-    bool _readable() const { return (_rptr!=_wptr || _full); }
-    bool _writeable() const { return !_full; }
+    static void _Assert(bool cond) { if (!cond) abort(); }
+    
+    bool _readable() const  { return (_rptr!=_wptr || _full);   }
+    bool _writeable() const { return !_full;                    }
     
     T _read() {
         T r = _buf[_rptr];
