@@ -1,51 +1,52 @@
 #pragma once
 #include <tuple>
+#include <functional>
 
-#define TaskBegin()                     \
-    if (_jmp) goto *_jmp                \
+#define TaskBegin()                             \
+    if (task._jmp) goto *task._jmp              \
 
-#define _TaskYield()                    \
-    do {                                \
-        __label__ jmp;                  \
-        _jmp = &&jmp;                   \
-        return;                         \
-        jmp:;                           \
+#define _TaskYield()                            \
+    do {                                        \
+        __label__ jmp;                          \
+        task._jmp = &&jmp;                      \
+        return;                                 \
+        jmp:;                                   \
     } while (0)
 
-#define TaskYield()                     \
-    do {                                \
-        state = State::Wait;            \
-        _TaskYield();                   \
-        state = State::Run;             \
-        didWork = true;                 \
+#define TaskYield()                             \
+    do {                                        \
+        task._state = Task::State::Wait;        \
+        _TaskYield();                           \
+        task._state = Task::State::Run;         \
+        task._didWork = true;                   \
     } while (0)
 
-#define TaskWait(cond)                  \
-    do {                                \
-        state = State::Wait;            \
-        while (!(cond)) _TaskYield();   \
-        state = State::Run;             \
-        didWork = true;                 \
+#define TaskWait(cond)                          \
+    do {                                        \
+        task._state = Task::State::Wait;        \
+        while (!(cond)) _TaskYield();           \
+        task._state = Task::State::Run;         \
+        task._didWork = true;                   \
     } while (0)
 
-#define TaskSleepMs(ms)                 \
-    do {                                \
-        state = State::Wait;            \
-        _sleepStartMs = TimeMs();       \
-        _sleepDurationMs = (ms);        \
-        do _TaskYield();                \
-        while (!_sleepDone());          \
-        state = State::Run;             \
-        didWork = true;                 \
+#define TaskSleepMs(ms)                         \
+    do {                                        \
+        task._state = Task::State::Wait;        \
+        task._sleepStartMs = Task::TimeMs();    \
+        task._sleepDurationMs = (ms);           \
+        do _TaskYield();                        \
+        while (!task._sleepDone());             \
+        task._state = Task::State::Run;         \
+        task._didWork = true;                   \
     } while (0)
 
-#define TaskEnd()                       \
-    do {                                \
-        __label__ jmp;                  \
-        state = State::Done;            \
-        _jmp = &&jmp;                   \
-        jmp:;                           \
-        return;                         \
+#define TaskEnd()                               \
+    do {                                        \
+        __label__ jmp;                          \
+        task._state = Task::State::Done;        \
+        task._jmp = &&jmp;                      \
+        jmp:;                                   \
+        return;                                 \
     } while (0)
 
 class Task {
@@ -56,23 +57,34 @@ public:
         Done,
     };
     
+    using TaskFn = std::function<void(Task& task)>;
+    
     // Functions provided by client
     static uint32_t TimeMs();
     static void DisableInterrupts();
     static void EnableInterrupts();
     static void WaitForInterrupt();
     
-    void reset() { *this = {}; }
-    void run() {}
+    Task(TaskFn fn) {
+        _fn = fn;
+    }
     
-    State state = State::Run;
-    bool didWork = false;
+    void reset() {
+        _state = State::Run;
+        _jmp = nullptr;
+    }
     
-protected:
+    void run() {
+        _fn(*this);
+    }
+    
     bool _sleepDone() const {
         return (TimeMs()-_sleepStartMs) >= _sleepDurationMs;
     }
     
+    TaskFn _fn;
+    State _state = State::Run;
+    bool _didWork = false;
     void* _jmp = nullptr;
     uint32_t _sleepStartMs = 0;
     uint32_t _sleepDurationMs = 0;
@@ -101,8 +113,8 @@ public:
 private:
     template <typename T>
     static void _runTask(bool& didWork, T& task) {
-        task.didWork = false;
-        switch (task.state) {
+        task._didWork = false;
+        switch (task._state) {
         case Task::State::Run:
         case Task::State::Wait:
             task.run();
@@ -110,7 +122,7 @@ private:
         default:
             break;
         }
-        didWork |= task.didWork;
+        didWork |= task._didWork;
     }
     
     std::tuple<Tasks&...> _tasks;
