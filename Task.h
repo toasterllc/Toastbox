@@ -162,10 +162,6 @@ public:
         _sleepDurationMs = ms;
     }
     
-    bool _sleepDone() const {
-        return (TimeMs()-_sleepStartMs) >= _sleepDurationMs;
-    }
-    
     void _setWaiting() {
         _state = Task::State::Wait;
     }
@@ -174,6 +170,10 @@ public:
         _state = Task::State::Run;
         _didWork = true;
         _IRQ.restore();
+    }
+    
+    bool _sleepDone() const {
+        return (TimeMs()-_sleepStartMs) >= _sleepDurationMs;
     }
     
     static inline Task* _CurrentTask = nullptr;
@@ -230,18 +230,6 @@ public:
         }
     }
     
-//    T read() {
-//        IRQState irq = IRQState::Disabled();
-//        _Assert(_readable());
-//        return _read();
-//    }
-//    
-//    void write(const T& x) {
-//        IRQState irq = IRQState::Disabled();
-//        _Assert(_writable());
-//        _write(x);
-//    }
-    
     ReadResult readTry() {
         IRQState irq = IRQState::Disabled();
         if (!_readable()) return {};
@@ -262,10 +250,8 @@ public:
     }
     
 private:
-    static void _Assert(bool cond) { if (!cond) abort(); }
-    
     bool _readable() const  { return (_rptr!=_wptr || _full);   }
-    bool _writable() const { return !_full;                    }
+    bool _writable() const  { return !_full;                    }
     
     T _read() {
         T r = _buf[_rptr];
