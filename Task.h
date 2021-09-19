@@ -2,67 +2,66 @@
 #include <tuple>
 #include <functional>
 
-#define _Task (Task::_CurrentTask)
+#define _Task (*Task::_CurrentTask)
+#define _TaskIRQ (Task::_IRQ)
 
-#define TaskBegin() ({                          \
-        if (_Task->_jmp)                        \
-            goto *_Task->_jmp;                  \
-        else                                    \
-            _Task->_didWork = true;             \
-    })
+#define TaskBegin() ({                      \
+    if (_Task._jmp) goto *_Task._jmp;       \
+    _Task._setRunning();                    \
+})
 
-#define _TaskYield() ({                         \
-        __label__ jmp;                          \
-        _Task->_jmp = &&jmp;                    \
-        return;                                 \
-        jmp:;                                   \
-    })
+#define _TaskYield() ({                     \
+    __label__ jmp;                          \
+    _Task._jmp = &&jmp;                     \
+    return;                                 \
+    jmp:;                                   \
+})
 
-#define TaskYield() ({                          \
-        _Task->_state = Task::State::Wait;      \
-        _TaskYield();                           \
-        _Task->_state = Task::State::Run;       \
-        _Task->_didWork = true;                 \
-    })
+#define TaskYield() ({                      \
+    _Task._setWaiting();                    \
+    _TaskYield();                           \
+    _Task._setRunning();                    \
+})
 
-#define TaskWait(cond) ({                       \
-        _Task->_state = Task::State::Wait;      \
-        while (!(cond)) _TaskYield();           \
-        _Task->_state = Task::State::Run;       \
-        _Task->_didWork = true;                 \
-    })
+#define TaskWait(cond) ({                   \
+    _Task._setWaiting();                    \
+    while (!(cond)) _TaskYield();           \
+    _Task._setRunning();                    \
+})
 
-#define TaskRead(chan) ({                       \
-        _Task->_state = Task::State::Wait;      \
-        TaskWait((chan).readable());            \
-        _Task->_state = Task::State::Run;       \
-        _Task->_didWork = true;                 \
-        (chan).read();                          \
-    })
+#define TaskRead(chan) ({                   \
+    _Task._setWaiting();                    \
+    TaskWait((chan).readable());            \
+    _Task._setRunning();                    \
+    (chan).read();                          \
+})
 
-#define TaskSleepMs(ms) ({                      \
-        _Task->_state = Task::State::Wait;      \
-        _Task->_sleepStartMs = Task::TimeMs();  \
-        _Task->_sleepDurationMs = (ms);         \
-        do _TaskYield();                        \
-        while (!_Task->_sleepDone());           \
-        _Task->_state = Task::State::Run;       \
-        _Task->_didWork = true;                 \
-    })
+#define TaskSleepMs(ms) ({                  \
+    _Task._setSleeping(ms);                 \
+    do _TaskYield();                        \
+    while (!_Task._sleepDone());            \
+    _Task._setRunning();                    \
+})
 
-#define TaskEnd() ({                            \
-        __label__ jmp;                          \
-        _Task->_state = Task::State::Done;      \
-        _Task->_jmp = &&jmp;                    \
-        jmp:;                                   \
-        return;                                 \
-    })
+#define TaskEnd() ({                        \
+    __label__ jmp;                          \
+    _Task._state = Task::State::Done;       \
+    _Task._jmp = &&jmp;                     \
+    jmp:;                                   \
+    return;                                 \
+})
 
 class IRQState {
 public:
     // Functions provided by client
     static bool SetInterruptsEnabled(bool en);
     static void WaitForInterrupt();
+    
+    static IRQState Enabled() {
+        IRQState irq;
+        irq.enable();
+        return irq;
+    }
     
     static IRQState Disabled() {
         IRQState irq;
@@ -121,14 +120,16 @@ public:
     [[noreturn]] static void Run(Tasks&... ts) {
         const std::reference_wrapper<Task> tasks[] = { static_cast<Task&>(ts)... };
         for (;;) {
-            IRQState irq = IRQState::Disabled();
-            // Execute every task
             bool didWork = false;
-            for (Task& task : tasks) {
-                didWork |= task.run();
-            }
-            // If no task performed work, go to sleep
-            if (!didWork) IRQState::WaitForInterrupt();
+            do {
+                _IRQ.disable();
+                didWork = false;
+                for (Task& task : tasks) {
+                    didWork |= task.run();
+                }
+            } while (didWork);
+            IRQState::WaitForInterrupt();
+            _IRQ.restore();
         }
     }
     
@@ -155,11 +156,28 @@ public:
         return _didWork;
     }
     
+    void _setSleeping(uint32_t ms) {
+        _state = Task::State::Wait;
+        _sleepStartMs = Task::TimeMs();
+        _sleepDurationMs = ms;
+    }
+    
     bool _sleepDone() const {
         return (TimeMs()-_sleepStartMs) >= _sleepDurationMs;
     }
     
+    void _setWaiting() {
+        _state = Task::State::Wait;
+    }
+    
+    void _setRunning() {
+        _state = Task::State::Run;
+        _didWork = true;
+        _IRQ.restore();
+    }
+    
     static inline Task* _CurrentTask = nullptr;
+    static inline IRQState _IRQ;
     TaskFn _fn;
     State _state = State::Run;
     bool _didWork = false;
