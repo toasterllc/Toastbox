@@ -2,52 +2,54 @@
 #include <tuple>
 #include <functional>
 
+#define _Task (Task::_CurrentTask)
+
 #define TaskBegin()                             \
     do {                                        \
-        if (task._jmp)                          \
-            goto *task._jmp;                    \
+        if (_Task->_jmp)                        \
+            goto *_Task->_jmp;                  \
     } while (0)
 
 #define _TaskYield()                            \
     do {                                        \
         __label__ jmp;                          \
-        task._jmp = &&jmp;                      \
+        _Task->_jmp = &&jmp;                    \
         return;                                 \
         jmp:;                                   \
     } while (0)
 
 #define TaskYield()                             \
     do {                                        \
-        task._state = Task::State::Wait;        \
+        _Task->_state = Task::State::Wait;      \
         _TaskYield();                           \
-        task._state = Task::State::Run;         \
-        task._didWork = true;                   \
+        _Task->_state = Task::State::Run;       \
+        _Task->_didWork = true;                 \
     } while (0)
 
 #define TaskWait(cond)                          \
     do {                                        \
-        task._state = Task::State::Wait;        \
+        _Task->_state = Task::State::Wait;      \
         while (!(cond)) _TaskYield();           \
-        task._state = Task::State::Run;         \
-        task._didWork = true;                   \
+        _Task->_state = Task::State::Run;       \
+        _Task->_didWork = true;                 \
     } while (0)
 
 #define TaskSleepMs(ms)                         \
     do {                                        \
-        task._state = Task::State::Wait;        \
-        task._sleepStartMs = Task::TimeMs();    \
-        task._sleepDurationMs = (ms);           \
+        _Task->_state = Task::State::Wait;      \
+        _Task->_sleepStartMs = Task::TimeMs();  \
+        _Task->_sleepDurationMs = (ms);         \
         do _TaskYield();                        \
-        while (!task._sleepDone());             \
-        task._state = Task::State::Run;         \
-        task._didWork = true;                   \
+        while (!_Task->_sleepDone());           \
+        _Task->_state = Task::State::Run;       \
+        _Task->_didWork = true;                 \
     } while (0)
 
 #define TaskEnd()                               \
     do {                                        \
         __label__ jmp;                          \
-        task._state = Task::State::Done;        \
-        task._jmp = &&jmp;                      \
+        _Task->_state = Task::State::Done;      \
+        _Task->_jmp = &&jmp;                    \
         jmp:;                                   \
         return;                                 \
     } while (0)
@@ -109,10 +111,10 @@ public:
         Done,
     };
     
-    using TaskFn = std::function<void(Task& task)>;
+    using TaskFn = std::function<void(void)>;
     
     template <typename ...Tasks>
-    static void Run(Tasks&... ts) {
+    [[noreturn]] static void Run(Tasks&... ts) {
         const std::reference_wrapper<Task> tasks[] = { static_cast<Task&>(ts)... };
         for (;;) {
             IRQState irq = IRQState::Disabled();
@@ -134,15 +136,18 @@ public:
     }
     
     bool run() {
+        Task*const prevTask = _CurrentTask;
+        _CurrentTask = this;
         _didWork = false;
         switch (_state) {
         case State::Run:
         case State::Wait:
-            _fn(*this);
+            _fn();
             break;
         default:
             break;
         }
+        _CurrentTask = prevTask;
         return _didWork;
     }
     
@@ -150,6 +155,7 @@ public:
         return (TimeMs()-_sleepStartMs) >= _sleepDurationMs;
     }
     
+    static inline Task* _CurrentTask = nullptr;
     TaskFn _fn;
     State _state = State::Run;
     bool _didWork = false;
