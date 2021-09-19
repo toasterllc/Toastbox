@@ -4,38 +4,43 @@
 
 #define _Task (Task::_CurrentTask)
 
-#define TaskBegin()                             \
-    do {                                        \
+#define TaskBegin() ({                          \
         if (_Task->_jmp)                        \
             goto *_Task->_jmp;                  \
-    } while (0)
+        else                                    \
+            _Task->_didWork = true;             \
+    })
 
-#define _TaskYield()                            \
-    do {                                        \
+#define _TaskYield() ({                         \
         __label__ jmp;                          \
         _Task->_jmp = &&jmp;                    \
         return;                                 \
         jmp:;                                   \
-    } while (0)
+    })
 
-#define TaskYield()                             \
-    do {                                        \
+#define TaskYield() ({                          \
         _Task->_state = Task::State::Wait;      \
         _TaskYield();                           \
         _Task->_state = Task::State::Run;       \
         _Task->_didWork = true;                 \
-    } while (0)
+    })
 
-#define TaskWait(cond)                          \
-    do {                                        \
+#define TaskWait(cond) ({                       \
         _Task->_state = Task::State::Wait;      \
         while (!(cond)) _TaskYield();           \
         _Task->_state = Task::State::Run;       \
         _Task->_didWork = true;                 \
-    } while (0)
+    })
 
-#define TaskSleepMs(ms)                         \
-    do {                                        \
+#define TaskRead(chan) ({                       \
+        _Task->_state = Task::State::Wait;      \
+        TaskWait((chan).readable());            \
+        _Task->_state = Task::State::Run;       \
+        _Task->_didWork = true;                 \
+        (chan).read();                          \
+    })
+
+#define TaskSleepMs(ms) ({                      \
         _Task->_state = Task::State::Wait;      \
         _Task->_sleepStartMs = Task::TimeMs();  \
         _Task->_sleepDurationMs = (ms);         \
@@ -43,16 +48,15 @@
         while (!_Task->_sleepDone());           \
         _Task->_state = Task::State::Run;       \
         _Task->_didWork = true;                 \
-    } while (0)
+    })
 
-#define TaskEnd()                               \
-    do {                                        \
+#define TaskEnd() ({                            \
         __label__ jmp;                          \
         _Task->_state = Task::State::Done;      \
         _Task->_jmp = &&jmp;                    \
         jmp:;                                   \
         return;                                 \
-    } while (0)
+    })
 
 class IRQState {
 public:
@@ -184,22 +188,41 @@ public:
         return _readable();
     }
     
-    bool writeable() const {
+    bool writable() const {
         IRQState irq = IRQState::Disabled();
-        return _writeable();
+        return _writable();
     }
     
     T read() {
-        IRQState irq = IRQState::Disabled();
-        _Assert(_readable());
-        return _read();
+        for (;;) {
+            IRQState irq = IRQState::Disabled();
+            if (_readable()) return _read();
+            IRQState::WaitForInterrupt();
+        }
     }
     
     void write(const T& x) {
-        IRQState irq = IRQState::Disabled();
-        _Assert(_writeable());
-        _write(x);
+        for (;;) {
+            IRQState irq = IRQState::Disabled();
+            if (_writable()) {
+                _write(x);
+                return;
+            }
+            IRQState::WaitForInterrupt();
+        }
     }
+    
+//    T read() {
+//        IRQState irq = IRQState::Disabled();
+//        _Assert(_readable());
+//        return _read();
+//    }
+//    
+//    void write(const T& x) {
+//        IRQState irq = IRQState::Disabled();
+//        _Assert(_writable());
+//        _write(x);
+//    }
     
     ReadResult readTry() {
         IRQState irq = IRQState::Disabled();
@@ -209,7 +232,7 @@ public:
     
     bool writeTry(const T& x) {
         IRQState irq = IRQState::Disabled();
-        if (!_writeable()) return false;
+        if (!_writable()) return false;
         _write(x);
         return true;
     }
@@ -224,7 +247,7 @@ private:
     static void _Assert(bool cond) { if (!cond) abort(); }
     
     bool _readable() const  { return (_rptr!=_wptr || _full);   }
-    bool _writeable() const { return !_full;                    }
+    bool _writable() const { return !_full;                    }
     
     T _read() {
         T r = _buf[_rptr];
