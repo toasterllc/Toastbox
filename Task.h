@@ -32,8 +32,16 @@
 #define TaskRead(chan) ({                   \
     _Task._setWaiting();                    \
     TaskWait((chan).readable());            \
+    auto val = (chan).read();               \
     _Task._setRunning();                    \
-    (chan).read();                          \
+    val;                                    \
+})
+
+#define TaskWrite(chan, val) ({             \
+    _Task._setWaiting();                    \
+    TaskWait((chan).writable());            \
+    (chan).write(val);                      \
+    _Task._setRunning();                    \
 })
 
 #define TaskSleepMs(ms) ({                  \
