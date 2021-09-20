@@ -51,14 +51,6 @@
     _Task._setRunning();                    \
 })
 
-#define TaskEnd() ({                        \
-    __label__ jmp;                          \
-    _Task._state = Task::State::Done;       \
-    _Task._jmp = &&jmp;                     \
-    jmp:;                                   \
-    return;                                 \
-})
-
 class IRQState {
 public:
     // Functions provided by client
@@ -119,7 +111,7 @@ public:
     enum class State {
         Run,
         Wait,
-        Done,
+        Stop,
     };
     
     using TaskFn = std::function<void(void)>;
@@ -148,6 +140,14 @@ public:
         _jmp = nullptr;
     }
     
+    void pause() {
+        _state = State::Stop;
+    }
+    
+    void resume() {
+        _state = State::Run;
+    }
+    
     bool run() {
         Task*const prevTask = _CurrentTask;
         _CurrentTask = this;
@@ -160,6 +160,17 @@ public:
         default:
             break;
         }
+        
+        switch (_state) {
+        case State::Run:
+            // The task terminated if it returns in the 'Run' state, so update its state
+            _state = State::Stop;
+            _jmp = nullptr;
+            break;
+        default:
+            break;
+        }
+        
         _CurrentTask = prevTask;
         return _didWork;
     }
