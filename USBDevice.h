@@ -240,7 +240,7 @@ public:
                     _CheckErr(ior, "GetPipePropertiesV3 failed");
                     
                     const bool dirOut = props.bDirection==kUSBOut;
-                    const uint8_t epAddr = (dirOut ? USB::Endpoint::DirOut : USB::Endpoint::DirIn)|props.bEndpointNumber;
+                    const uint8_t epAddr = (dirOut ? USB::Endpoint::DirectionOut : USB::Endpoint::DirectionIn)|props.bEndpointNumber;
                     _epInfos[_OffsetForEndpointAddr(epAddr)] = {
                         .valid          = true,
                         .epAddr         = epAddr,
@@ -365,7 +365,7 @@ private:
     };
     
     static uint8_t _OffsetForEndpointAddr(uint8_t epAddr) {
-        return ((epAddr&USB::Endpoint::DirMask)>>3) | (epAddr&USB::Endpoint::IdxMask);
+        return ((epAddr&USB::Endpoint::DirectionMask)>>3) | (epAddr&USB::Endpoint::IndexMask);
     }
     
     static void _CheckErr(IOReturn ior, const char* errMsg) {
@@ -569,7 +569,7 @@ private:
     }
     
     static uint8_t _OffsetForEndpointAddr(uint8_t epAddr) {
-        return ((epAddr&USB::Endpoint::DirMask)>>3) | (epAddr&USB::Endpoint::IdxMask);
+        return ((epAddr&USB::Endpoint::DirectionMask)>>3) | (epAddr&USB::Endpoint::IndexMask);
     }
     
     static unsigned int _LibUSBTimeoutFromMs(Milliseconds timeout) {

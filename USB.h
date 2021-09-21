@@ -63,11 +63,11 @@ namespace Endpoint {
     static constexpr uint8_t DefaultOut                 = 0x00; // Default control endpoint, OUT
     static constexpr uint8_t DefaultIn                  = 0x80; // Default control endpoint, IN
     
-    static constexpr uint8_t DirOut                     = 0x00;
-    static constexpr uint8_t DirIn                      = 0x80;
-    static constexpr uint8_t DirMask                    = 0x80;
+    static constexpr uint8_t DirectionOut               = 0x00;
+    static constexpr uint8_t DirectionIn                = 0x80;
+    static constexpr uint8_t DirectionMask              = 0x80;
     
-    static constexpr uint8_t IdxMask                    = 0x0F;
+    static constexpr uint8_t IndexMask                  = 0x0F;
 };
 
 struct DeviceDescriptor {
