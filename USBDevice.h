@@ -192,6 +192,11 @@ public:
     USBDevice(const SendRight& service) : _service(service) {
         assert(service);
         
+//        CFMutableDictionaryRef props;
+//        kern_return_t kr = IORegistryEntryCreateCFProperties(_service, &props, nullptr, 0);
+//        assert(kr == kIOReturnSuccess);
+//        CFShow(props);
+        
         _IOCFPlugInInterface plugin;
         {
             IOCFPlugInInterface** tmp = nullptr;
