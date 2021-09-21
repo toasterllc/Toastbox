@@ -508,7 +508,7 @@ private:
         int ir = libusb_bulk_transfer(_devHandle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
             _LibUSBTimeoutFromMs(timeout));
         _CheckErr(ir, "libusb_bulk_transfer failed");
-        return ir;
+        return xferLen;
     }
     
     template <typename T>
