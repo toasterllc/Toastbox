@@ -3,7 +3,6 @@
 #include <functional>
 
 #define _Task (*Task::_CurrentTask)
-#define _TaskIRQ (Task::_IRQ)
 
 #define TaskBegin() ({                      \
     if (_Task._jmp) goto *_Task._jmp;       \
