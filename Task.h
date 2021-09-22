@@ -1,19 +1,9 @@
 #pragma once
-#include <tuple>
 #include <functional>
-
-#define _Task (*Task::_CurrentTask)
 
 #define TaskBegin() ({                      \
     if (_Task._jmp) goto *_Task._jmp;       \
     _Task._setRunning();                    \
-})
-
-#define _TaskYield() ({                     \
-    __label__ jmp;                          \
-    _Task._jmp = &&jmp;                     \
-    return;                                 \
-    jmp:;                                   \
 })
 
 #define TaskYield() ({                      \
@@ -38,6 +28,15 @@
     do _TaskYield();                        \
     while (!_Task._sleepDone());            \
     _Task._setRunning();                    \
+})
+
+#define _Task (*Task::_CurrentTask)
+
+#define _TaskYield() ({                     \
+    __label__ jmp;                          \
+    _Task._jmp = &&jmp;                     \
+    return;                                 \
+    jmp:;                                   \
 })
 
 class IRQState {
