@@ -24,23 +24,13 @@
 
 #define TaskWait(cond) ({                   \
     _Task._setWaiting();                    \
-    while (!(cond)) _TaskYield();           \
+    auto c = (cond);                        \
+    while (!((bool)c)) {                    \
+        _TaskYield();                       \
+        c = (cond);                         \
+    }                                       \
     _Task._setRunning();                    \
-})
-
-#define TaskRead(chan) ({                   \
-    _Task._setWaiting();                    \
-    TaskWait((chan).readable());            \
-    auto val = (chan).read();               \
-    _Task._setRunning();                    \
-    val;                                    \
-})
-
-#define TaskWrite(chan, val) ({             \
-    _Task._setWaiting();                    \
-    TaskWait((chan).writable());            \
-    (chan).write(val);                      \
-    _Task._setRunning();                    \
+    c;                                      \
 })
 
 #define TaskSleepMs(ms) ({                  \
@@ -202,95 +192,4 @@ public:
     void* _jmp = nullptr;
     uint32_t _sleepStartMs = 0;
     uint32_t _sleepDurationMs = 0;
-};
-
-template <typename T, size_t N>
-class Channel {
-public:
-    class ReadResult {
-    public:
-        ReadResult() {}
-        ReadResult(const T& x) : _x(x), _e(true) {}
-        constexpr operator bool() const { return _e; }
-        constexpr const T& operator*() const& { return _x; }
-    
-    private:
-        T _x;
-        bool _e = false;
-    };
-    
-    bool readable() const {
-        IRQState irq = IRQState::Disabled();
-        return _readable();
-    }
-    
-    bool writable() const {
-        IRQState irq = IRQState::Disabled();
-        return _writable();
-    }
-    
-    T read() {
-        for (;;) {
-            IRQState irq = IRQState::Disabled();
-            if (_readable()) return _read();
-            IRQState::WaitForInterrupt();
-        }
-    }
-    
-    void write(const T& x) {
-        for (;;) {
-            IRQState irq = IRQState::Disabled();
-            if (_writable()) {
-                _write(x);
-                return;
-            }
-            IRQState::WaitForInterrupt();
-        }
-    }
-    
-    ReadResult readTry() {
-        IRQState irq = IRQState::Disabled();
-        if (!_readable()) return {};
-        return _read();
-    }
-    
-    bool writeTry(const T& x) {
-        IRQState irq = IRQState::Disabled();
-        if (!_writable()) return false;
-        _write(x);
-        return true;
-    }
-    
-    void reset() {
-        _rptr = 0;
-        _wptr = 0;
-        _full = 0;
-    }
-    
-private:
-    bool _readable() const  { return (_rptr!=_wptr || _full);   }
-    bool _writable() const  { return !_full;                    }
-    
-    T _read() {
-        T r = _buf[_rptr];
-        _rptr++;
-        // Wrap _rptr to 0
-        if (_rptr == N) _rptr = 0;
-        _full = false;
-        return r;
-    }
-    
-    void _write(const T& x) {
-        _buf[_wptr] = x;
-        _wptr++;
-        // Wrap _wptr to 0
-        if (_wptr == N) _wptr = 0;
-        // Update `_full`
-        _full = (_rptr == _wptr);
-    }
-    
-    T _buf[N];
-    size_t _rptr = 0;
-    size_t _wptr = 0;
-    bool _full = false;
 };
