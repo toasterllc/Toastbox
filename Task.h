@@ -104,9 +104,8 @@ public:
     
     using TaskFn = std::function<void(void)>;
     
-    template <typename ...Tasks>
-    [[noreturn]] static void Run(Tasks&... ts) {
-        const std::reference_wrapper<Task> tasks[] = { static_cast<Task&>(ts)... };
+    template <typename T, size_t N>
+    [[noreturn]] static void Run(T (&tasks)[N]) {
         for (;;) {
             bool didWork = false;
             do {
@@ -119,6 +118,12 @@ public:
             IRQState::WaitForInterrupt();
             _IRQ.restore();
         }
+    }
+    
+    template <typename ...T>
+    [[noreturn]] static void Run(T&... ts) {
+        std::reference_wrapper<Task> tasks[] = { static_cast<Task&>(ts)... };
+        Run(tasks);
     }
     
     Task(TaskFn fn) : _fn(fn) {}
