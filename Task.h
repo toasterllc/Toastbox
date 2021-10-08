@@ -128,7 +128,7 @@ public:
     
     Task(TaskFn fn) : _fn(fn) {}
     
-    void reset() {
+    void start() {
         _state = State::Run;
         _jmp = nullptr;
     }
