@@ -340,8 +340,8 @@ public:
     }
     
     template <typename T>
-    void vendorRequestOut(uint8_t req, T& x, Milliseconds timeout=Forever) {
-        vendorRequestOut(req, (void*)&x, sizeof(x), timeout);
+    void vendorRequestOut(uint8_t req, const T& x, Milliseconds timeout=Forever) {
+        vendorRequestOut(req, (const void*)&x, sizeof(x), timeout);
     }
     
     void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
@@ -534,11 +534,11 @@ private:
     }
     
     template <typename T>
-    void vendorRequestOut(uint8_t req, T& x, Milliseconds timeout=Forever) {
+    void vendorRequestOut(uint8_t req, const T& x, Milliseconds timeout=Forever) {
         vendorRequestOut(req, (void*)&x, sizeof(x), timeout);
     }
     
-    void vendorRequestOut(uint8_t req, void* data, size_t len, Milliseconds timeout=Forever) {
+    void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
         _openIfNeeded();
         
         const uint8_t bmRequestType =
