@@ -152,7 +152,6 @@ public:
     USBDevice(USBDevice&& x) = default;
     USBDevice& operator=(USBDevice&& x) = default;
     
-    
 #if __APPLE__
     static std::vector<USBDevice> GetDevices() {
         std::vector<USBDevice> devices;
@@ -616,4 +615,15 @@ private:
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount] = {};
     
 #endif
+    
+public:
+    std::vector<uint8_t> endpoints() {
+        std::vector<uint8_t> eps;
+        for (const _EndpointInfo& epInfo : _epInfos) {
+            if (epInfo.valid) {
+                eps.push_back(epInfo.epAddr);
+            }
+        }
+        return eps;
+    }
 };
