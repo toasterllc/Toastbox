@@ -1,40 +1,38 @@
 #pragma once
 #include <functional>
 
-#define TaskBegin() ({                      \
-    if (_Task._jmp) goto *_Task._jmp;       \
-    _Task._setRunning();                    \
-})
+#define TaskBegin()                         \
+    Task& _task = (*Task::_CurrentTask);    \
+    if (_task._jmp) goto *_task._jmp;       \
+    _task._setRunning();                    \
 
 #define TaskYield() ({                      \
-    _Task._setWaiting();                    \
+    _task._setWaiting();                    \
     _TaskYield();                           \
-    _Task._setRunning();                    \
+    _task._setRunning();                    \
 })
 
 #define TaskWait(cond) ({                   \
-    _Task._setWaiting();                    \
+    _task._setWaiting();                    \
     auto c = (cond);                        \
     while (!((bool)c)) {                    \
         _TaskYield();                       \
         c = (cond);                         \
     }                                       \
-    _Task._setRunning();                    \
+    _task._setRunning();                    \
     c;                                      \
 })
 
 #define TaskSleepMs(ms) ({                  \
-    _Task._setSleeping(ms);                 \
+    _task._setSleeping(ms);                 \
     do _TaskYield();                        \
-    while (!_Task._sleepDone());            \
-    _Task._setRunning();                    \
+    while (!_task._sleepDone());            \
+    _task._setRunning();                    \
 })
-
-#define _Task (*Task::_CurrentTask)
 
 #define _TaskYield() ({                     \
     __label__ jmp;                          \
-    _Task._jmp = &&jmp;                     \
+    _task._jmp = &&jmp;                     \
     return;                                 \
     jmp:;                                   \
 })
