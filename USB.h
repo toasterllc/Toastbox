@@ -56,6 +56,9 @@ namespace RequestType {
 };
 
 namespace Endpoint {
+    static constexpr size_t MaxPacketSizeCtrl           = 64;
+    static constexpr size_t MaxPacketSizeBulk           = 512;
+    
     static constexpr uint8_t MaxCountOut                = 16; // Max number of endpoints, OUT
     static constexpr uint8_t MaxCountIn                 = 16; // Max number of endpoints, IN
     static constexpr uint8_t MaxCount                   = 32; // Max number of endpoints, total
