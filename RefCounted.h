@@ -1,6 +1,8 @@
 #pragma once
 #include <optional>
 
+namespace Toastbox {
+
 template <typename T, auto RetainFn, auto ReleaseFn>
 class RefCounted {
 public:
@@ -56,3 +58,5 @@ public:
 private:
     std::optional<T> _t;
 };
+
+} // namespace Toastbox

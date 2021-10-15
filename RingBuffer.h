@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <algorithm>
 
+namespace Toastbox {
+
 template <typename T, size_t Cap>
 class RingBuffer {
 public:
@@ -107,3 +109,5 @@ private:
     bool _full = false;
     T _buf[Cap];
 };
+
+} // namespace Toastbox

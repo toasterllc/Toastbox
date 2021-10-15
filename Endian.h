@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Endian {
+namespace Toastbox::Endian {
 
 constexpr int16_t Swap(int16_t x) {
     return  (x&0xFF00)>>8   |
@@ -86,4 +86,4 @@ constexpr int32_t   BFH_S32(int32_t x)  { return BFH(x); }
 constexpr uint32_t  HFB_U32(uint32_t x) { return HFB(x); }
 constexpr int32_t   HFB_S32(int32_t x)  { return HFB(x); }
 
-} // namespace Endian
+} // namespace Toastbox::Endian

@@ -2,6 +2,8 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace Toastbox {
+
 template <typename... Ts>
 size_t HashInts(Ts... ts) {
     // FNV-1 hash
@@ -14,3 +16,5 @@ size_t HashInts(Ts... ts) {
     }
     return hash;
 }
+
+} // namespace Toastbox

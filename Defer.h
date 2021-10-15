@@ -1,6 +1,8 @@
 #pragma once
 #include <memory>
 
+namespace Toastbox {
+
 template <typename Fn>
 class DeferFn {
 public:
@@ -14,6 +16,8 @@ template <typename F>
 DeferFn<F> Defer(F&& f) {
     return DeferFn<F>(std::move(f));
 };
+
+} // namespace Toastbox
 
 #define _DeferConcat2(x, y) x ## y
 #define _DeferConcat(x, y) _DeferConcat2(x, y)

@@ -2,7 +2,7 @@
 #include <cstdint>
 #include "Endian.h"
 
-namespace USB {
+namespace Toastbox::USB {
 
 // Universal Serial Bus Specification
 // Revision 2.0
@@ -186,9 +186,7 @@ struct SetupRequest {
     uint16_t wLength;
 } __attribute__((packed));
 
-} // namespace USB
-
-namespace USB::CDC {
+namespace CDC {
 
 // Universal Serial Bus Class Definitions for Communication Devices
 // Version 1.1
@@ -242,4 +240,6 @@ struct LineCoding {
     uint8_t bDataBits;
 } __attribute__((packed));
 
-} // namespace USB::CDC
+} // namespace CDC
+
+} // namespace Toastbox::USB

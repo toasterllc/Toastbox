@@ -1,6 +1,8 @@
 #pragma once
 #include <sstream>
 
+namespace Toastbox {
+
 std::string _RuntimeErrorFmtMsg(const char* str) {
     char msg[256];
     int sr = snprintf(msg, sizeof(msg), "%s", str);
@@ -20,3 +22,5 @@ template <typename ...Args>
 std::runtime_error RuntimeError(const char* fmt, Args&&... args) {
     return std::runtime_error(_RuntimeErrorFmtMsg(fmt, std::forward<Args>(args)...));
 }
+
+} // namespace Toastbox

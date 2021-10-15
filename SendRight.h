@@ -3,6 +3,8 @@
 #include <cassert>
 #include "RefCounted.h"
 
+namespace Toastbox {
+
 void _SendRightRetain(mach_port_t x) {
     if (MACH_PORT_VALID(x)) {
         kern_return_t kr = mach_port_mod_refs(mach_task_self(), x, MACH_PORT_RIGHT_SEND, 1);
@@ -28,3 +30,5 @@ public:
     using RefCounted::RefCounted;
     bool valid() const { return hasValue() && MACH_PORT_VALID(*this); }
 };
+
+} // namespace Toastbox

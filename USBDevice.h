@@ -19,6 +19,8 @@
 #include "RuntimeError.h"
 #include "Defer.h"
 
+namespace Toastbox {
+
 class USBDevice {
 public:
     using Milliseconds = std::chrono::milliseconds;
@@ -627,3 +629,5 @@ public:
         return eps;
     }
 };
+
+} // namespace Toastbox
