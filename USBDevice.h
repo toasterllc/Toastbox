@@ -16,6 +16,7 @@
 #include <cassert>
 #include "USB.h"
 #include "RefCounted.h"
+#include "Uniqued.h"
 #include "RuntimeError.h"
 #include "Defer.h"
 
@@ -70,14 +71,14 @@ private:
                     kIOCFPlugInInterfaceID, &tmp, &score);
                 if (kr != KERN_SUCCESS) throw std::runtime_error("IOCreatePlugInInterfaceForService failed");
                 if (!tmp) throw std::runtime_error("IOCreatePlugInInterfaceForService returned NULL plugin");
-                plugin = tmp;
+                plugin = _IOCFPlugInInterface(_IOCFPlugInInterface::NoRetain, tmp);
             }
             
             {
                 IOUSBInterfaceInterface** tmp = nullptr;
                 HRESULT hr = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID), (LPVOID*)&tmp);
                 if (hr) throw std::runtime_error("QueryInterface failed");
-                _iokitInterface = tmp;
+                _iokitInterface = _IOUSBInterfaceInterface(_IOUSBInterfaceInterface::NoRetain, tmp);
             }
         }
         
@@ -161,9 +162,9 @@ public:
         kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, IOServiceMatching(kIOUSBDeviceClassName), &ioServicesIter);
         if (kr != KERN_SUCCESS) throw RuntimeError("IOServiceGetMatchingServices failed: 0x%x", kr);
         
-        SendRight servicesIter(ioServicesIter);
+        SendRight servicesIter(SendRight::NoRetain, ioServicesIter);
         while (servicesIter) {
-            SendRight service(IOIteratorNext(servicesIter));
+            SendRight service(SendRight::NoRetain, IOIteratorNext(servicesIter));
             if (!service.valid()) break;
             // Ignore devices that we fail to create a USBDevice for
             try { devices.emplace_back(service); }
@@ -206,14 +207,14 @@ public:
                 kIOCFPlugInInterfaceID, &tmp, &score);
             if (kr != KERN_SUCCESS) throw std::runtime_error("IOCreatePlugInInterfaceForService failed");
             if (!tmp) throw std::runtime_error("IOCreatePlugInInterfaceForService returned NULL plugin");
-            plugin = tmp;
+            plugin = _IOCFPlugInInterface(_IOCFPlugInInterface::NoRetain, tmp);
         }
         
         {
             IOUSBDeviceInterface** tmp = nullptr;
             HRESULT hr = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID*)&tmp);
             if (hr) throw std::runtime_error("QueryInterface failed");
-            _iokitInterface = tmp;
+            _iokitInterface = _IOUSBDeviceInterface(_IOUSBDeviceInterface::NoRetain, tmp);
         }
         
         // Populate _interfaces / _epInfos
@@ -229,9 +230,9 @@ public:
             IOReturn ior = iokitExec<&IOUSBDeviceInterface::CreateInterfaceIterator>(&req, &ioServicesIter);
             _CheckErr(ior, "CreateInterfaceIterator failed");
             
-            SendRight servicesIter(ioServicesIter);
+            SendRight servicesIter(SendRight::NoRetain, ioServicesIter);
             while (servicesIter) {
-                SendRight service(IOIteratorNext(servicesIter));
+                SendRight service(SendRight::NoRetain, IOIteratorNext(servicesIter));
                 if (!service.valid()) break;
                 _interfaces.emplace_back(std::move(service));
                 
@@ -418,7 +419,7 @@ private:
         return r;
     }
     
-    USBDevice(libusb_device* dev) : _dev(dev) {
+    USBDevice(libusb_device* dev) : _dev(_LibusbDev::Retain, std::move(dev)) {
         assert(dev);
         
         // Populate _interfaces and _epInfos
@@ -506,7 +507,7 @@ private:
     size_t read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
         _claimInterfaceForEndpointAddr(epAddr);
         int xferLen = 0;
-        int ir = libusb_bulk_transfer(_devHandle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
+        int ir = libusb_bulk_transfer(_handle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
             _LibUSBTimeoutFromMs(timeout));
         _CheckErr(ir, "libusb_bulk_transfer failed");
         return xferLen;
@@ -521,7 +522,7 @@ private:
         _claimInterfaceForEndpointAddr(epAddr);
         
         int xferLen = 0;
-        int ir = libusb_bulk_transfer(_devHandle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
+        int ir = libusb_bulk_transfer(_handle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
             _LibUSBTimeoutFromMs(timeout));
         _CheckErr(ir, "libusb_bulk_transfer failed");
         if ((size_t)xferLen != len)
@@ -530,7 +531,7 @@ private:
     
     void reset(uint8_t epAddr) {
         _claimInterfaceForEndpointAddr(epAddr);
-        int ir = libusb_clear_halt(_devHandle, epAddr);
+        int ir = libusb_clear_halt(_handle, epAddr);
         _CheckErr(ir, "libusb_clear_halt failed");
     }
     
@@ -549,7 +550,7 @@ private:
         const uint8_t bRequest = req;
         const uint8_t wValue = 0;
         const uint8_t wIndex = 0;
-        int ir = libusb_control_transfer(_devHandle, bmRequestType, bRequest, wValue, wIndex,
+        int ir = libusb_control_transfer(_handle, bmRequestType, bRequest, wValue, wIndex,
             (uint8_t*)data, len, _LibUSBTimeoutFromMs(timeout));
         _CheckErr(ir, "libusb_control_transfer failed");
     }
@@ -589,9 +590,11 @@ private:
     }
     
     void _openIfNeeded() {
-        if (_devHandle) return;
-        int ir = libusb_open(_dev, &_devHandle);
+        if (_handle.hasValue()) return;
+        libusb_device_handle* handle = nullptr;
+        int ir = libusb_open(_dev, &handle);
         _CheckErr(ir, "libusb_open failed");
+        _handle = handle;
     }
     
     void _claimInterfaceForEndpointAddr(uint8_t epAddr) {
@@ -599,7 +602,7 @@ private:
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         if (!iface.claimed) {
-            int ir = libusb_claim_interface(_devHandle, iface.bInterfaceNumber);
+            int ir = libusb_claim_interface(_handle, iface.bInterfaceNumber);
             _CheckErr(ir, "libusb_claim_interface failed");
             iface.claimed = true;
         }
@@ -611,8 +614,15 @@ private:
         return epInfo;
     }
     
-    libusb_device* _dev = nullptr;
-    libusb_device_handle* _devHandle = nullptr;
+    static void _Retain(libusb_device* x) { libusb_ref_device(x); }
+    static void _Release(libusb_device* x) { libusb_unref_device(x); }
+    using _LibusbDev = RefCounted<libusb_device*, _Retain, _Release>;
+    
+    static void _Close(libusb_device_handle* x) { libusb_close(x); }
+    using _LibusbHandle = Uniqued<libusb_device_handle*, _Close>;
+    
+    _LibusbDev _dev = {};
+    _LibusbHandle _handle = {};
     std::vector<_Interface> _interfaces = {};
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount] = {};
     

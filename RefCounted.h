@@ -6,13 +6,14 @@ namespace Toastbox {
 template <typename T, auto RetainFn, auto ReleaseFn>
 class RefCounted {
 public:
+    struct NoRetainType {}; static constexpr auto NoRetain = NoRetainType();
     struct RetainType {}; static constexpr auto Retain = RetainType();
     
     // Default constructor: empty
     RefCounted() {}
     // Constructor: no retain
-    RefCounted(const T& t) : _t(t) {}
-    RefCounted(T&& t) : _t(std::move(t)) {}
+    RefCounted(NoRetainType, const T& t) : _t(t) {}
+    RefCounted(NoRetainType, T&& t) : _t(std::move(t)) {}
     // Constructor: with retain
     RefCounted(RetainType, T&& t) : _t(std::move(t)) { RetainFn(*_t); }
     // Copy constructor: use copy assignment operator
@@ -56,7 +57,7 @@ public:
     }
     
 private:
-    std::optional<T> _t;
+    std::optional<T> _t = {};
 };
 
 } // namespace Toastbox

@@ -44,5 +44,5 @@ public:
     }
     
 private:
-    std::optional<T> _t;
+    std::optional<T> _t = {};
 };
