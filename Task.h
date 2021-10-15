@@ -4,7 +4,7 @@
 #define TaskBegin()                         \
     Task& _task = (*Task::_CurrentTask);    \
     if (_task._jmp) goto *_task._jmp;       \
-    _task._setRunning();                    \
+    _task._setRunning();
 
 #define TaskYield() ({                      \
     _task._setWaiting();                    \
@@ -14,11 +14,8 @@
 
 #define TaskWait(cond) ({                   \
     _task._setWaiting();                    \
-    auto c = (cond);                        \
-    while (!((bool)c)) {                    \
-        _TaskYield();                       \
-        c = (cond);                         \
-    }                                       \
+    decltype(cond) c;                       \
+    while (!(c = (cond))) _TaskYield();     \
     _task._setRunning();                    \
     c;                                      \
 })
@@ -140,6 +137,7 @@ public:
     }
     
     bool run() {
+        // Run the task
         Task*const prevTask = _CurrentTask;
         _CurrentTask = this;
         _didWork = false;
