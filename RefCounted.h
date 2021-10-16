@@ -37,6 +37,10 @@ public:
     
     ~RefCounted() { if (_t) ReleaseFn(*_t); }
     
+    bool operator==(const RefCounted& x) const {
+        return _t == x._t;
+    }
+    
     operator T() const {
         assert(_t);
         return *_t;

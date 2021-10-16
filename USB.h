@@ -164,11 +164,11 @@ struct StringDescriptorN : StringDescriptor {
     }
     
     std::string asciiString() {
-        const size_t len = desc.bLength-2;
+        const size_t len = (bLength-2)/2;
         std::string r;
         r.reserve(len); // std::string adds null terminator implicitly, so don't add space for it ourself
         for (size_t i=0; i<len; i++) {
-            r += Endian::HFL(desc.str[i]);
+            r += Endian::HFL(str[i]);
         }
         return r;
     }

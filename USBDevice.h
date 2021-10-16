@@ -260,6 +260,10 @@ public:
         }
     }
     
+    bool operator==(const USBDevice& x) const {
+        return _service == x._service;
+    }
+    
     USB::DeviceDescriptor deviceDescriptor() const {
         // Apple's APIs don't provide a way to get the device descriptor, only
         // the configuration descriptor (GetConfigurationDescriptorPtr).
@@ -316,14 +320,14 @@ public:
         };
     }
     
-    USB::StringDescriptorMax stringDescriptor(uint8_t idx) const {
+    USB::StringDescriptorMax stringDescriptor(uint8_t idx, uint16_t lang=USB::Language::English) const {
         using namespace Endian;
         USB::StringDescriptorMax desc;
         IOUSBDevRequest req = {
             .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
             .bRequest       = kUSBRqGetDescriptor,
             .wValue         = (uint16_t)((kUSBStringDesc<<8)|idx),
-            .wIndex         = USB::Language::English,
+            .wIndex         = lang,
             .wLength        = sizeof(desc),
             .pData          = &desc,
         };
@@ -331,18 +335,6 @@ public:
         IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
         _CheckErr(ior, "DeviceRequest failed");
         return desc;
-    }
-    
-    std::string serialNumber() {
-        uint8_t idx = 0;
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBGetSerialNumberStringIndex>(&idx);
-        _CheckErr(ior, "DeviceRequest failed");
-        return stringDescriptor(idx).asciiString();
-    }
-    
-    uint16_t maxPacketSize(uint8_t epAddr) const {
-        const _EndpointInfo& epInfo = _epInfo(epAddr);
-        return epInfo.maxPacketSize;
     }
     
     template <typename... Args>
@@ -477,6 +469,10 @@ private:
         }
     }
     
+    bool operator==(const USBDevice& x) const {
+        return _dev == x._dev;
+    }
+    
     USB::DeviceDescriptor deviceDescriptor() const {
         struct libusb_device_descriptor desc;
         int ir = libusb_get_device_descriptor(_dev, &desc);
@@ -516,9 +512,14 @@ private:
         };
     }
     
-    uint16_t maxPacketSize(uint8_t epAddr) const {
-        const _EndpointInfo& epInfo = _epInfo(epAddr);
-        return epInfo.maxPacketSize;
+    USB::StringDescriptorMax stringDescriptor(uint8_t idx, uint16_t lang=USB::Language::English) {
+        _openIfNeeded();
+        
+        USB::StringDescriptorMax desc;
+        int ir = libusb_get_descriptor(_handle, USB::DescriptorType::String, idx, (uint8_t*)&desc, sizeof(desc));
+        _CheckErr(ir, "libusb_get_string_descriptor failed");
+        desc.bLength = ir;
+        return desc;
     }
     
     template <typename T>
@@ -654,6 +655,24 @@ private:
 #endif
     
 public:
+    
+    uint16_t maxPacketSize(uint8_t epAddr) const {
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
+        return epInfo.maxPacketSize;
+    }
+    
+    std::string manufacturer() {
+        return stringDescriptor(deviceDescriptor().iManufacturer).asciiString();
+    }
+    
+    std::string product() {
+        return stringDescriptor(deviceDescriptor().iProduct).asciiString();
+    }
+    
+    std::string serialNumber() {
+        return stringDescriptor(deviceDescriptor().iSerialNumber).asciiString();
+    }
+    
     std::vector<uint8_t> endpoints() {
         std::vector<uint8_t> eps;
         for (const _EndpointInfo& epInfo : _epInfos) {
