@@ -273,6 +273,7 @@ public:
             .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
             .bRequest       = kUSBRqGetDescriptor,
             .wValue         = kUSBDeviceDesc<<8,
+            .wIndex         = 0,
             .wLength        = sizeof(desc),
             .pData          = &desc,
         };
@@ -313,6 +314,30 @@ public:
             .bmAttributes            = HFL(descPtr->bmAttributes),
             .bMaxPower               = HFL(descPtr->MaxPower), // `MaxPower`: typo or intentional indication of unit change?
         };
+    }
+    
+    USB::StringDescriptorMax stringDescriptor(uint8_t idx) const {
+        using namespace Endian;
+        USB::StringDescriptorMax desc;
+        IOUSBDevRequest req = {
+            .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
+            .bRequest       = kUSBRqGetDescriptor,
+            .wValue         = (uint16_t)((kUSBStringDesc<<8)|idx),
+            .wIndex         = USB::Language::English,
+            .wLength        = sizeof(desc),
+            .pData          = &desc,
+        };
+        
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
+        _CheckErr(ior, "DeviceRequest failed");
+        return desc;
+    }
+    
+    std::string serialNumber() {
+        uint8_t idx = 0;
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBGetSerialNumberStringIndex>(&idx);
+        _CheckErr(ior, "DeviceRequest failed");
+        return stringDescriptor(idx).asciiString();
     }
     
     uint16_t maxPacketSize(uint8_t epAddr) const {

@@ -73,6 +73,10 @@ namespace Endpoint {
     static constexpr uint8_t IndexMask                  = 0x0F;
 };
 
+namespace Language {
+    static constexpr uint16_t English                   = 0x0409;
+};
+
 struct DeviceDescriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
@@ -146,15 +150,32 @@ struct StringDescriptor {
 
 template <size_t N>
 struct StringDescriptorN : StringDescriptor {
+    static_assert(N <= 126, "max character count is 126 (2 string descriptor header bytes + 126 UTF-16 characters == 2 + 2*126 == 254; more than that overflows bLength)");
     uint16_t str[N] = {};
     
+    StringDescriptorN() :
+    StringDescriptor({.bLength=sizeof(*this), .bDescriptorType=DescriptorType::String}) {}
+    
     constexpr StringDescriptorN(const char (&s)[N+1]) :
-    StringDescriptor({.bLength=(2*N+2), .bDescriptorType=DescriptorType::String}) {
+    StringDescriptor({.bLength=sizeof(*this), .bDescriptorType=DescriptorType::String}) {
         for (size_t i=0; i<N; i++) {
             str[i] = Endian::LFH_U16(s[i]);
         }
     }
+    
+    std::string asciiString() {
+        const size_t len = desc.bLength-2;
+        std::string r;
+        r.reserve(len); // std::string adds null terminator implicitly, so don't add space for it ourself
+        for (size_t i=0; i<len; i++) {
+            r += Endian::HFL(desc.str[i]);
+        }
+        return r;
+    }
+    
 } __attribute__((packed));
+
+using StringDescriptorMax = StringDescriptorN<126>;
 
 template <size_t N>
 constexpr auto StringDescriptorMake(const char (&str)[N]) {
