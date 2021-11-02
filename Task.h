@@ -37,7 +37,8 @@
 class IRQState {
 public:
     // Functions provided by client
-    static bool SetInterruptsEnabled(bool en);
+    static bool InterruptsEnabled();
+    static void SetInterruptsEnabled(bool en);
     static void WaitForInterrupt();
     
     static IRQState Enabled() {
@@ -62,14 +63,16 @@ public:
     
     void enable() {
         _Assert(!_prevEnValid);
-        _prevEn = SetInterruptsEnabled(true);
+        _prevEn = InterruptsEnabled();
         _prevEnValid = true;
+        SetInterruptsEnabled(true);
     }
     
     void disable() {
         _Assert(!_prevEnValid);
-        _prevEn = SetInterruptsEnabled(false);
+        _prevEn = InterruptsEnabled();
         _prevEnValid = true;
+        SetInterruptsEnabled(false);
     }
     
     void restore() {
@@ -102,16 +105,17 @@ public:
     template <typename T, size_t N>
     [[noreturn]] static void Run(T (&tasks)[N]) {
         for (;;) {
+            IRQState irq = IRQState::Disabled();
+            
             bool didWork = false;
             do {
-                _IRQ.disable();
                 didWork = false;
                 for (Task& task : tasks) {
                     didWork |= task.run();
                 }
             } while (didWork);
+            
             IRQState::WaitForInterrupt();
-            _IRQ.restore();
         }
     }
     
@@ -177,7 +181,6 @@ public:
     void _setRunning() {
         _state = Task::State::Run;
         _didWork = true;
-        _IRQ.restore();
     }
     
     bool _sleepDone() const {
@@ -185,7 +188,6 @@ public:
     }
     
     static inline Task* _CurrentTask = nullptr;
-    static inline IRQState _IRQ;
     TaskFn _fn;
     State _state = State::Run;
     bool _didWork = false;
