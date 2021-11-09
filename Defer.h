@@ -21,4 +21,4 @@ DeferFn<F> Defer(F&& f) {
 
 #define _DeferConcat2(x, y) x ## y
 #define _DeferConcat(x, y) _DeferConcat2(x, y)
-#define Defer(action) auto _DeferConcat(defer, __COUNTER__) = Defer([&](){ action; });
+#define Defer(action) auto _DeferConcat(defer, __COUNTER__) = Toastbox::Defer([&](){ action; });
