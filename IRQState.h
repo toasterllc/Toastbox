@@ -1,5 +1,7 @@
 #pragma once
 
+namespace Toastbox {
+
 class IRQState {
 public:
     // Functions provided by client
@@ -20,34 +22,41 @@ public:
     
     IRQState()                  = default;
     IRQState(const IRQState& x) = delete;
-    IRQState(IRQState&& x)      = default;
+    IRQState(IRQState&& x) {
+        _s = x._s;
+        x._s = {};
+    }
     
     ~IRQState() {
         restore();
     }
     
     void enable() {
-        _Assert(!_prevEnValid);
-        _prevEn = SetInterruptsEnabled(true);
-        _prevEnValid = true;
+        _Assert(!_s.prevEnValid);
+        _s.prevEn = SetInterruptsEnabled(true);
+        _s.prevEnValid = true;
     }
     
     void disable() {
-        _Assert(!_prevEnValid);
-        _prevEn = SetInterruptsEnabled(false);
-        _prevEnValid = true;
+        _Assert(!_s.prevEnValid);
+        _s.prevEn = SetInterruptsEnabled(false);
+        _s.prevEnValid = true;
     }
     
     void restore() {
-        if (_prevEnValid) {
-            SetInterruptsEnabled(_prevEn);
-            _prevEnValid = false;
+        if (_s.prevEnValid) {
+            SetInterruptsEnabled(_s.prevEn);
+            _s.prevEnValid = false;
         }
     }
     
 private:
     static void _Assert(bool cond) { if (!cond) abort(); }
     
-    bool _prevEn = false;
-    bool _prevEnValid = false;
+    struct {
+        bool prevEn = false;
+        bool prevEnValid = false;
+    } _s;
 };
+
+} // namespace Toastbox

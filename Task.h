@@ -1,38 +1,41 @@
 #pragma once
 #include <functional>
+#include "IRQState.h"
 
-#define TaskBegin()                         \
-    Task& _task = (*Task::_CurrentTask);    \
-    if (_task._jmp) goto *_task._jmp;       \
+#define TaskBegin()                                             \
+    Toastbox::Task& _task = (*Toastbox::Task::_CurrentTask);    \
+    if (_task._jmp) goto *_task._jmp;                           \
     _task._setRunning();
 
-#define TaskYield() ({                      \
-    _task._setWaiting();                    \
-    _TaskYield();                           \
-    _task._setRunning();                    \
+#define TaskYield() ({                                          \
+    _task._setWaiting();                                        \
+    _TaskYield();                                               \
+    _task._setRunning();                                        \
 })
 
-#define TaskWait(cond) ({                   \
-    _task._setWaiting();                    \
-    decltype(cond) c;                       \
-    while (!(c = (cond))) _TaskYield();     \
-    _task._setRunning();                    \
-    c;                                      \
+#define TaskWait(cond) ({                                       \
+    _task._setWaiting();                                        \
+    decltype(cond) c;                                           \
+    while (!(c = (cond))) _TaskYield();                         \
+    _task._setRunning();                                        \
+    c;                                                          \
 })
 
-#define TaskSleepMs(ms) ({                  \
-    _task._setSleeping(ms);                 \
-    do _TaskYield();                        \
-    while (!_task._sleepDone());            \
-    _task._setRunning();                    \
+#define TaskSleepMs(ms) ({                                      \
+    _task._setSleeping(ms);                                     \
+    do _TaskYield();                                            \
+    while (!_task._sleepDone());                                \
+    _task._setRunning();                                        \
 })
 
-#define _TaskYield() ({                     \
-    __label__ jmp;                          \
-    _task._jmp = &&jmp;                     \
-    return;                                 \
-    jmp:;                                   \
+#define _TaskYield() ({                                         \
+    __label__ jmp;                                              \
+    _task._jmp = &&jmp;                                         \
+    return;                                                     \
+    jmp:;                                                       \
 })
+
+namespace Toastbox {
 
 class Task {
 public:
@@ -141,3 +144,5 @@ public:
     uint32_t _sleepStartMs = 0;
     uint32_t _sleepDurationMs = 0;
 };
+
+} // namespace Toastbox
