@@ -529,7 +529,6 @@ private:
             (uintmax_t)sizeof(t), (uintmax_t)len);
     }
     
-    #warning TODO: loop if ior==interrupted
     size_t read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
         _claimInterfaceForEndpointAddr(epAddr);
         int xferLen = 0;
