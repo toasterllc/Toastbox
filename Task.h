@@ -1,6 +1,6 @@
 #pragma once
 #include <functional>
-#include "IRQState.h"
+#include "IntState.h"
 
 #define TaskBegin()                                             \
     Toastbox::Task& _task = (*Toastbox::Task::_CurrentTask);    \
@@ -55,14 +55,14 @@ public:
         for (;;) {
             bool didWork = false;
             do {
-                _IRQ.disable();
+                _Ints.disable();
                 didWork = false;
                 for (Task& task : tasks) {
                     didWork |= task.run();
                 }
             } while (didWork);
-            IRQState::WaitForInterrupt();
-            _IRQ.restore();
+            IntState::WaitForInterrupt();
+            _Ints.restore();
         }
     }
     
@@ -128,7 +128,7 @@ public:
     void _setRunning() {
         _state = Task::State::Run;
         _didWork = true;
-        _IRQ.restore();
+        _Ints.restore();
     }
     
     bool _sleepDone() const {
@@ -136,7 +136,7 @@ public:
     }
     
     static inline Task* _CurrentTask = nullptr;
-    static inline IRQState _IRQ;
+    static inline IntState _Ints;
     TaskFn _fn;
     State _state = State::Run;
     bool _didWork = false;
