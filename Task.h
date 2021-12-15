@@ -24,7 +24,7 @@ public:
     template <typename T_Task>
     static void Start() {
         _Task& task = _GetTask<T_Task>();
-        task.sp = _CurrentTask->spInit;
+        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
         task.go = _TaskStart;
     }
     
@@ -143,8 +143,6 @@ private:
         using _VoidFn = void(*)();
         
         const _VoidFn run = nullptr;
-        void*const spInit = nullptr;
-        
         void* sp = nullptr;
         _VoidFn go = nullptr;
         Ticks sleepTotal = 0;
@@ -166,6 +164,7 @@ private:
         // Restore scheduler regs
         _RegsRestore();
         // Restore scheduler PC
+        if (!*((void**)_get_SP_register())) for (;;);
         _PCRestore();
     }
     
@@ -196,6 +195,7 @@ private:
         // Restore scheduler regs
         _RegsRestore();
         // Restore scheduler PC
+        if (!*((void**)_get_SP_register())) for (;;);
         _PCRestore();
     }
     
@@ -207,9 +207,11 @@ private:
         _SPSave(_SP);
         // Restore task SP
         _SPRestore(_CurrentTask->sp);
+        if ((void*)_get_SP_register() != _CurrentTask->sp) for (;;);
         // Restore task regs
         _RegsRestore();
         // Restore task PC
+        if (!*((void**)_get_SP_register())) for (;;);
         _PCRestore();
     }
     
@@ -243,7 +245,6 @@ private:
     
     static inline _Task _Tasks[] = {_Task{
         .run    = T_Tasks::Run,
-        .spInit = T_Tasks::Stack + sizeof(T_Tasks::Stack),
         .sp     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
         .go     = _TaskHasOption<T_Tasks, typename Option::Start>() ? _TaskStart : _TaskNop,
     }...};
