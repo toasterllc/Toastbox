@@ -164,7 +164,6 @@ private:
         // Restore scheduler regs
         _RegsRestore();
         // Restore scheduler PC
-        if (!*((void**)_get_SP_register())) for (;;);
         _PCRestore();
     }
     
@@ -195,7 +194,6 @@ private:
         // Restore scheduler regs
         _RegsRestore();
         // Restore scheduler PC
-        if (!*((void**)_get_SP_register())) for (;;);
         _PCRestore();
     }
     
@@ -207,11 +205,9 @@ private:
         _SPSave(_SP);
         // Restore task SP
         _SPRestore(_CurrentTask->sp);
-        if ((void*)_get_SP_register() != _CurrentTask->sp) for (;;);
         // Restore task regs
         _RegsRestore();
         // Restore task PC
-        if (!*((void**)_get_SP_register())) for (;;);
         _PCRestore();
     }
     
