@@ -4,7 +4,7 @@
 
 namespace Toastbox {
 
-template <void T_SleepFn(), typename... T_Tasks>
+template <typename... T_Tasks>
 class Scheduler {
 public:
     using Ticks = unsigned int;
@@ -54,7 +54,7 @@ public:
             
             // No work to do
             // Go to sleep!
-            T_SleepFn();
+            IntState::WaitForInterrupt();
         }
     }
     
