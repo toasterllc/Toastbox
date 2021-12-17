@@ -8,30 +8,77 @@ template <typename... T_Tasks>
 class Scheduler {
 public:
     using Ticks = unsigned int;
+    using VoidFn = void(*)();
     
     struct Option {
-        struct Start; // Task should start
+        template <VoidFn T_StartFn>
+        struct StartFn {};
     };
     
     template <typename... T_Options>
     struct Options {
-        template <typename T_Option>
-        static constexpr bool Exists() {
-            return (std::is_same_v<T_Option, T_Options> || ...);
+        static constexpr VoidFn GetStartFn() { return _GetStartFn<T_Options...>(); }
+        
+        template <typename T_Opt=void, typename... T_Opts>
+        static constexpr VoidFn _GetStartFn() {
+            if constexpr ((bool)__GetStartFn<T_Opt>::value) return __GetStartFn<T_Opt>::Fn;
+            if constexpr ((bool)sizeof...(T_Opts)) return _GetStartFn<T_Opts...>();
+            return nullptr;
         }
+        
+        template <typename>
+        struct __GetStartFn : std::true_type {
+            static constexpr VoidFn Fn = nullptr;
+        };
+        
+        template <VoidFn T_StartFn>
+        struct __GetStartFn<typename Option::template StartFn<T_StartFn>> : std::false_type {
+            static constexpr VoidFn Fn = T_StartFn;
+        };
+        
+//        template <typename T_Option>
+//        static constexpr bool Exists() {
+//            return (std::is_same_v<T_Option, T_Options> || ...);
+//        }
     };
     
-    template <typename T_Task>
-    static void Start() {
-        _Task& task = _GetTask<T_Task>();
+//    template <typename T_Task>
+//    static void Start(VoidFn fn) {
+//        _Task& task = _GetTask<T_Task>();
+//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
+//        task.cont = _TaskStart;
+//        task.start = fn;
+//    }
+//    
+//    template <typename T_Task, VoidFn T_Fn>
+//    static void Start() {
+//        _Task& task = _GetTask<T_Task>();
+//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
+//        task.cont = _TaskStart;
+//        task.start = T_Fn;
+//    }
+    
+    // Start<task,fn>(): starts `task` running with `fn`
+    template <typename T_Task, typename T_Fn>
+    static void Start(T_Fn&& fn) {
+        constexpr _Task& task = _GetTask<T_Task>();
+        task.start = fn;
+        task.cont = _TaskStart;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-        task.go = _TaskStart;
     }
     
+    // Stop<task>(): stops `task`
     template <typename T_Task>
     static void Stop() {
-        _Task& task = _GetTask<T_Task>();
-        task.go = _TaskNop;
+        constexpr _Task& task = _GetTask<T_Task>();
+        task.cont = _TaskNop;
+    }
+    
+    // Running<task>(): returns whether `task` is running
+    template <typename T_Task>
+    static bool Running() {
+        constexpr _Task& task = _GetTask<T_Task>();
+        return task.cont != _TaskNop;
     }
     
     // Run(): run the tasks indefinitely
@@ -44,7 +91,7 @@ public:
                 _DidWork = false;
                 for (_Task& task : _Tasks) {
                     _CurrentTask = &task;
-                    task.go();
+                    task.cont();
                 }
             } while (_DidWork);
             
@@ -80,6 +127,12 @@ public:
             _TaskStartWork();
             return r;
         }
+    }
+    
+    // Wait<task>(): sleep current task until `task` stops running
+    template <typename T_Task>
+    static void Wait() {
+        Wait([] { return !Running<T_Task>(); });
     }
     
     // Sleep(ticks): sleep current task for `ticks`
@@ -140,13 +193,9 @@ private:
     else if constexpr (sizeof(void*) == 4)  asm volatile("mova %0, r1" : : "m" (src) : )
     
     struct _Task {
-        using _VoidFn = void(*)();
-        
-        const _VoidFn run = nullptr;
+        VoidFn start = nullptr;
+        VoidFn cont = nullptr;
         void* sp = nullptr;
-        _VoidFn go = nullptr;
-        Ticks sleepTotal = 0;
-        Ticks sleepCount = 0;
     };
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
@@ -158,7 +207,7 @@ private:
         // Restore task SP
         _SPRestore(_CurrentTask->sp);
         // Run task
-        _TaskRun();
+        __TaskStart();
         // Restore scheduler SP
         _SPRestore(_SP);
         // Restore scheduler regs
@@ -167,16 +216,16 @@ private:
         _PCRestore();
     }
     
-    static void _TaskRun() {
+    static void __TaskStart() {
         // Future invocations should execute _TaskResume
-        _CurrentTask->go = _TaskResume;
+        _CurrentTask->cont = _TaskResume;
         // Signal that we did work
         _TaskStartWork();
-        // Invoke task Run()
-        _CurrentTask->run();
+        // Invoke task function
+        _CurrentTask->start();
         // The task finished
         // Future invocations should do nothing
-        _CurrentTask->go = _TaskNop;
+        _CurrentTask->cont = _TaskNop;
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
@@ -240,9 +289,9 @@ private:
     }
     
     static inline _Task _Tasks[] = {_Task{
-        .run    = T_Tasks::Run,
+        .start  = T_Tasks::Options::GetStartFn(),
+        .cont   = T_Tasks::Options::GetStartFn() ? _TaskStart : _TaskNop,
         .sp     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
-        .go     = _TaskHasOption<T_Tasks, typename Option::Start>() ? _TaskStart : _TaskNop,
     }...};
     
     static inline bool _DidWork = false;
@@ -252,9 +301,6 @@ private:
     static inline Ticks _CurrentTime = 0;
     static inline bool _Wake = false;
     static inline Ticks _WakeTime = 0;
-    
-    class Task;
-    friend Task;
     
 #undef _SPSave
 #undef _SPRestore
