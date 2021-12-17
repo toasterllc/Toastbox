@@ -17,7 +17,8 @@ public:
     
     template <typename... T_Options>
     struct Options {
-        static constexpr VoidFn GetAutoStartFn() { return _GetAutoStartFn<T_Options...>(); }
+        static constexpr VoidFn GetAutoStartFn() { return Yield; }
+//        static constexpr VoidFn GetAutoStartFn() { return _GetAutoStartFn<T_Options...>(); }
         
         template <typename T_Opt=void, typename... T_Opts>
         static constexpr VoidFn _GetAutoStartFn() {
@@ -288,9 +289,15 @@ private:
         return T_Task::Options::template Exists<T_Option>();
     }
     
+    static constexpr VoidFn _Choose(VoidFn x, VoidFn y1, VoidFn y2) {
+        if constexpr (x == y1) return y1;
+        return y2;
+    }
+    
     static inline _Task _Tasks[] = {_Task{
         .start  = T_Tasks::Options::GetAutoStartFn(),
-        .cont   = T_Tasks::Options::GetAutoStartFn() ? _TaskStart : _TaskNop,
+//        std::conditional<T_Tasks::Options::GetAutoStartFn(), _TaskStart, _TaskNop>::type
+        .cont   = _Choose(T_Tasks::Options::GetAutoStartFn(), _TaskStart, _TaskNop),
         .sp     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
