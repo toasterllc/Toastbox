@@ -4,54 +4,51 @@
 
 namespace Toastbox {
 
+using TaskFn = void(*)();
+
+struct TaskOption {
+    template <TaskFn T_Fn>
+    struct AutoStart;
+};
+
+template <typename... T_Opts>
+struct TaskOptions {
+    template <typename... Args>
+    struct _AutoStart : std::false_type {
+        static constexpr TaskFn Fn = nullptr;
+    };
+    
+    template <typename T, typename... Args>
+    struct _AutoStart<T, Args...> : _AutoStart<Args...> {};
+    
+    template <TaskFn T_Fn>
+    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>> : std::true_type {
+        static constexpr TaskFn Fn = T_Fn;
+    };
+    
+    template <TaskFn T_Fn, typename... Args>
+    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>, Args...> : std::true_type {
+        static constexpr TaskFn Fn = T_Fn;
+    };
+    
+    using AutoStart = _AutoStart<T_Opts...>;
+};
+
 template <typename... T_Tasks>
 class Scheduler {
 public:
     using Ticks = unsigned int;
-    using VoidFn = void(*)();
-    
-    struct Option {
-        template <VoidFn T_AutoStart>
-        struct AutoStart {};
-    };
-    
-    template <typename... T_Options>
-    struct Options {
-        static constexpr VoidFn GetAutoStartFn() { return Yield; }
-//        static constexpr VoidFn GetAutoStartFn() { return _GetAutoStartFn<T_Options...>(); }
-        
-        template <typename T_Opt=void, typename... T_Opts>
-        static constexpr VoidFn _GetAutoStartFn() {
-            if constexpr (__GetAutoStartFn<T_Opt>::value) return __GetAutoStartFn<T_Opt>::Fn;
-            if constexpr (sizeof...(T_Opts) > 0) return _GetAutoStartFn<T_Opts...>();
-            return nullptr;
-        }
-        
-        template <typename>
-        struct __GetAutoStartFn : std::false_type {
-            static constexpr VoidFn Fn = nullptr;
-        };
-        
-        template <VoidFn T_Fn>
-        struct __GetAutoStartFn<typename Option::template AutoStart<T_Fn>> : std::true_type {
-            static constexpr VoidFn Fn = T_Fn;
-        };
-        
-//        template <typename T_Option>
-//        static constexpr bool Exists() {
-//            return (std::is_same_v<T_Option, T_Options> || ...);
-//        }
-    };
+    using TaskFn = void(*)();
     
 //    template <typename T_Task>
-//    static void Start(VoidFn fn) {
+//    static void Start(TaskFn fn) {
 //        _Task& task = _GetTask<T_Task>();
 //        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
 //        task.cont = _TaskStart;
 //        task.start = fn;
 //    }
 //    
-//    template <typename T_Task, VoidFn T_Fn>
+//    template <typename T_Task, TaskFn T_Fn>
 //    static void Start() {
 //        _Task& task = _GetTask<T_Task>();
 //        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
@@ -194,8 +191,8 @@ private:
     else if constexpr (sizeof(void*) == 4)  asm volatile("mova %0, r1" : : "m" (src) : )
     
     struct _Task {
-        VoidFn start = nullptr;
-        VoidFn cont = nullptr;
+        TaskFn start = nullptr;
+        TaskFn cont = nullptr;
         void* sp = nullptr;
     };
     
@@ -289,16 +286,10 @@ private:
         return T_Task::Options::template Exists<T_Option>();
     }
     
-    static constexpr VoidFn _Choose(VoidFn x, VoidFn y1, VoidFn y2) {
-        if constexpr (x == y1) return y1;
-        return y2;
-    }
-    
     static inline _Task _Tasks[] = {_Task{
-        .start  = T_Tasks::Options::GetAutoStartFn(),
-//        std::conditional<T_Tasks::Options::GetAutoStartFn(), _TaskStart, _TaskNop>::type
-        .cont   = _Choose(T_Tasks::Options::GetAutoStartFn(), _TaskStart, _TaskNop),
-        .sp     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
+        .start = T_Tasks::Options::AutoStart::Fn,
+        .cont = T_Tasks::Options::AutoStart::value ? _TaskStart : _TaskNop,
+        .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
     static inline bool _DidWork = false;
