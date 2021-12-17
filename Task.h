@@ -47,7 +47,7 @@ public:
 //    static void Start(TaskFn fn) {
 //        _Task& task = _GetTask<T_Task>();
 //        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-//        task.cont = _TaskStart;
+//        task.cont = _ContStart;
 //        task.start = fn;
 //    }
 //    
@@ -55,7 +55,7 @@ public:
 //    static void Start() {
 //        _Task& task = _GetTask<T_Task>();
 //        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-//        task.cont = _TaskStart;
+//        task.cont = _ContStart;
 //        task.start = T_Fn;
 //    }
     
@@ -64,7 +64,7 @@ public:
     static void Start(T_Fn&& fn) {
         constexpr _Task& task = _GetTask<T_Task>();
         task.start = fn;
-        task.cont = _TaskStart;
+        task.cont = _ContStart;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
     }
     
@@ -72,14 +72,14 @@ public:
     template <typename T_Task>
     static void Stop() {
         constexpr _Task& task = _GetTask<T_Task>();
-        task.cont = _TaskNop;
+        task.cont = _ContNop;
     }
     
     // Running<task>(): returns whether `task` is running
     template <typename T_Task>
     static bool Running() {
         constexpr _Task& task = _GetTask<T_Task>();
-        return task.cont != _TaskNop;
+        return task.cont != _ContNop;
     }
     
     // Run(): run the tasks indefinitely
@@ -199,34 +199,22 @@ private:
         void* sp = nullptr;
     };
     
-    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void _TaskStart() {
-        // Save scheduler regs
-        _RegsSave();
-        // Save scheduler SP
-        _SPSave(_SP);
-        // Restore task SP
-        _SPRestore(_CurrentTask->sp);
-        // Run task
-        __TaskStart();
-        // Restore scheduler SP
-        _SPRestore(_SP);
-        // Restore scheduler regs
-        _RegsRestore();
-        // Restore scheduler PC
-        _PCRestore();
+    static void _TaskStartWork() {
+        _DidWork = true;
+        // Enable interrupts
+        IntState::SetInterruptsEnabled(true);
     }
     
-    static void __TaskStart() {
-        // Future invocations should execute _TaskResume
-        _CurrentTask->cont = _TaskResume;
+    static void _TaskStart() {
+        // Future invocations should execute _ContResume
+        _CurrentTask->cont = _ContResume;
         // Signal that we did work
         _TaskStartWork();
         // Invoke task function
         _CurrentTask->start();
         // The task finished
         // Future invocations should do nothing
-        _CurrentTask->cont = _TaskNop;
+        _CurrentTask->cont = _ContNop;
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
@@ -248,7 +236,25 @@ private:
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void _TaskResume() {
+    static void _ContStart() {
+        // Save scheduler regs
+        _RegsSave();
+        // Save scheduler SP
+        _SPSave(_SP);
+        // Restore task SP
+        _SPRestore(_CurrentTask->sp);
+        // Run task
+        _TaskStart();
+        // Restore scheduler SP
+        _SPRestore(_SP);
+        // Restore scheduler regs
+        _RegsRestore();
+        // Restore scheduler PC
+        _PCRestore();
+    }
+    
+    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
+    static void _ContResume() {
         // Save scheduler regs
         _RegsSave();
         // Save scheduler SP
@@ -261,15 +267,9 @@ private:
         _PCRestore();
     }
     
-    static void _TaskNop() {
+    static void _ContNop() {
         // Return to scheduler
         return;
-    }
-    
-    static void _TaskStartWork() {
-        _DidWork = true;
-        // Enable interrupts
-        IntState::SetInterruptsEnabled(true);
     }
     
     // _GetTask(): returns the _Task& for the given T_Task
@@ -291,7 +291,7 @@ private:
     
     static inline _Task _Tasks[] = {_Task{
         .start = T_Tasks::Options::AutoStart::Fn,
-        .cont = T_Tasks::Options::AutoStart::Valid ? _TaskStart : _TaskNop,
+        .cont = T_Tasks::Options::AutoStart::Valid ? _ContStart : _ContNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
