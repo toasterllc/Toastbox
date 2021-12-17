@@ -14,7 +14,8 @@ struct TaskOption {
 template <typename... T_Opts>
 struct TaskOptions {
     template <typename... Args>
-    struct _AutoStart : std::false_type {
+    struct _AutoStart {
+        static constexpr bool Valid = false;
         static constexpr TaskFn Fn = nullptr;
     };
     
@@ -22,12 +23,14 @@ struct TaskOptions {
     struct _AutoStart<T, Args...> : _AutoStart<Args...> {};
     
     template <TaskFn T_Fn>
-    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>> : std::true_type {
+    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>> {
+        static constexpr bool Valid = true;
         static constexpr TaskFn Fn = T_Fn;
     };
     
     template <TaskFn T_Fn, typename... Args>
-    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>, Args...> : std::true_type {
+    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>, Args...> {
+        static constexpr bool Valid = true;
         static constexpr TaskFn Fn = T_Fn;
     };
     
@@ -288,7 +291,7 @@ private:
     
     static inline _Task _Tasks[] = {_Task{
         .start = T_Tasks::Options::AutoStart::Fn,
-        .cont = T_Tasks::Options::AutoStart::value ? _TaskStart : _TaskNop,
+        .cont = T_Tasks::Options::AutoStart::Valid ? _TaskStart : _TaskNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
