@@ -11,29 +11,29 @@ public:
     using VoidFn = void(*)();
     
     struct Option {
-        template <VoidFn T_StartFn>
-        struct StartFn {};
+        template <VoidFn T_AutoStart>
+        struct AutoStart {};
     };
     
     template <typename... T_Options>
     struct Options {
-        static constexpr VoidFn GetStartFn() { return _GetStartFn<T_Options...>(); }
+        static constexpr VoidFn GetAutoStartFn() { return _GetAutoStartFn<T_Options...>(); }
         
         template <typename T_Opt=void, typename... T_Opts>
-        static constexpr VoidFn _GetStartFn() {
-            if constexpr ((bool)__GetStartFn<T_Opt>::value) return __GetStartFn<T_Opt>::Fn;
-            if constexpr ((bool)sizeof...(T_Opts)) return _GetStartFn<T_Opts...>();
+        static constexpr VoidFn _GetAutoStartFn() {
+            if constexpr (__GetAutoStartFn<T_Opt>::value) return __GetAutoStartFn<T_Opt>::Fn;
+            if constexpr (sizeof...(T_Opts) > 0) return _GetAutoStartFn<T_Opts...>();
             return nullptr;
         }
         
         template <typename>
-        struct __GetStartFn : std::true_type {
+        struct __GetAutoStartFn : std::false_type {
             static constexpr VoidFn Fn = nullptr;
         };
         
-        template <VoidFn T_StartFn>
-        struct __GetStartFn<typename Option::template StartFn<T_StartFn>> : std::false_type {
-            static constexpr VoidFn Fn = T_StartFn;
+        template <VoidFn T_Fn>
+        struct __GetAutoStartFn<typename Option::template AutoStart<T_Fn>> : std::true_type {
+            static constexpr VoidFn Fn = T_Fn;
         };
         
 //        template <typename T_Option>
@@ -289,8 +289,8 @@ private:
     }
     
     static inline _Task _Tasks[] = {_Task{
-        .start  = T_Tasks::Options::GetStartFn(),
-        .cont   = T_Tasks::Options::GetStartFn() ? _TaskStart : _TaskNop,
+        .start  = T_Tasks::Options::GetAutoStartFn(),
+        .cont   = T_Tasks::Options::GetAutoStartFn() ? _TaskStart : _TaskNop,
         .sp     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
