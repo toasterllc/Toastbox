@@ -1,6 +1,7 @@
 #pragma once
 #include <type_traits>
 #include "Toastbox/IntState.h"
+#include "Toastbox/TaskArch.h"
 
 namespace Toastbox {
 
@@ -195,26 +196,6 @@ public:
     }
     
 private:
-#define _RegsSave()                                                                         \
-         if constexpr (sizeof(void*) == 2)  asm("pushm   #7, r10" : : : );                  \
-    else if constexpr (sizeof(void*) == 4)  asm("pushm.a #7, r10" : : : )
-
-#define _RegsRestore()                                                                      \
-         if constexpr (sizeof(void*) == 2)  asm("popm   #7, r10" : : : );                   \
-    else if constexpr (sizeof(void*) == 4)  asm("popm.a #7, r10" : : : )
-
-#define _PCRestore()                                                                        \
-         if constexpr (sizeof(void*) == 2)  asm volatile("ret " : : : );                    \
-    else if constexpr (sizeof(void*) == 4)  asm volatile("reta" : : : )
-
-#define _SPSave(dst)                                                                        \
-         if constexpr (sizeof(void*) == 2)  asm volatile("mov  r1, %0" : "=m" (dst) : : );  \
-    else if constexpr (sizeof(void*) == 4)  asm volatile("mova r1, %0" : "=m" (dst) : : )
-
-#define _SPRestore(src)                                                                     \
-         if constexpr (sizeof(void*) == 2)  asm volatile("mov  %0, r1" : : "m" (src) : );   \
-    else if constexpr (sizeof(void*) == 4)  asm volatile("mova %0, r1" : : "m" (src) : )
-    
     struct _Task {
         TaskFn start = nullptr;
         TaskFn cont = nullptr;
@@ -242,51 +223,51 @@ private:
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskPause() {
         // Save task regs
-        _RegsSave();
+        TaskRegsSave();
         // Save task SP
-        _SPSave(_CurrentTask->sp);
+        TaskSPSave(_CurrentTask->sp);
         // Disable interrupts
         // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
         // Regardless, when returning to the scheduler, interrupts need to be disabled.
         IntState::SetInterruptsEnabled(false);
         // Restore scheduler SP
-        _SPRestore(_SP);
+        TaskSPRestore(_SP);
         // Restore scheduler regs
-        _RegsRestore();
+        TaskRegsRestore();
         // Restore scheduler PC
-        _PCRestore();
+        TaskPCRestore();
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _ContStart() {
         // Save scheduler regs
-        _RegsSave();
+        TaskRegsSave();
         // Save scheduler SP
-        _SPSave(_SP);
+        TaskSPSave(_SP);
         // Restore task SP
-        _SPRestore(_CurrentTask->sp);
+        TaskSPRestore(_CurrentTask->sp);
         // Run task
         _TaskStart();
         // Restore scheduler SP
-        _SPRestore(_SP);
+        TaskSPRestore(_SP);
         // Restore scheduler regs
-        _RegsRestore();
+        TaskRegsRestore();
         // Restore scheduler PC
-        _PCRestore();
+        TaskPCRestore();
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _ContResume() {
         // Save scheduler regs
-        _RegsSave();
+        TaskRegsSave();
         // Save scheduler SP
-        _SPSave(_SP);
+        TaskSPSave(_SP);
         // Restore task SP
-        _SPRestore(_CurrentTask->sp);
+        TaskSPRestore(_CurrentTask->sp);
         // Restore task regs
-        _RegsRestore();
+        TaskRegsRestore();
         // Restore task PC
-        _PCRestore();
+        TaskPCRestore();
     }
     
     static void _ContNop() {
@@ -331,9 +312,6 @@ private:
     static inline Ticks _CurrentTime = 0;
     static inline bool _Wake = false;
     static inline Ticks _WakeTime = 0;
-    
-#undef _SPSave
-#undef _SPRestore
 };
 
 } // namespace Toastbox
