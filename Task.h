@@ -223,51 +223,51 @@ private:
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskPause() {
         // Save task regs
-        TaskRegsSave();
+        TaskSaveRegs();
         // Save task SP
-        TaskSPSave(_CurrentTask->sp);
+        TaskSaveSP(_CurrentTask->sp);
         // Disable interrupts
         // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
         // Regardless, when returning to the scheduler, interrupts need to be disabled.
         IntState::SetInterruptsEnabled(false);
         // Restore scheduler SP
-        TaskSPRestore(_SP);
+        TaskRestoreSP(_SP);
         // Restore scheduler regs
-        TaskRegsRestore();
+        TaskRestoreRegs();
         // Restore scheduler PC
-        TaskPCRestore();
+        TaskRestorePC();
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _ContStart() {
         // Save scheduler regs
-        TaskRegsSave();
+        TaskSaveRegs();
         // Save scheduler SP
-        TaskSPSave(_SP);
+        TaskSaveSP(_SP);
         // Restore task SP
-        TaskSPRestore(_CurrentTask->sp);
+        TaskRestoreSP(_CurrentTask->sp);
         // Run task
         _TaskStart();
         // Restore scheduler SP
-        TaskSPRestore(_SP);
+        TaskRestoreSP(_SP);
         // Restore scheduler regs
-        TaskRegsRestore();
+        TaskRestoreRegs();
         // Restore scheduler PC
-        TaskPCRestore();
+        TaskRestorePC();
     }
     
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _ContResume() {
         // Save scheduler regs
-        TaskRegsSave();
+        TaskSaveRegs();
         // Save scheduler SP
-        TaskSPSave(_SP);
+        TaskSaveSP(_SP);
         // Restore task SP
-        TaskSPRestore(_CurrentTask->sp);
+        TaskRestoreSP(_CurrentTask->sp);
         // Restore task regs
-        TaskRegsRestore();
+        TaskRestoreRegs();
         // Restore task PC
-        TaskPCRestore();
+        TaskRestorePC();
     }
     
     static void _ContNop() {
