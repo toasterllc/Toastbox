@@ -144,16 +144,6 @@ public:
         Sleep(_TicksForUs(1000*(uint32_t)ms));
     }
     
-//    template <uint16_t T_Ms>
-//    static void SleepMs() {
-//        Sleep(_TicksForUs(1000*(uint32_t)T_Ms));
-//    }
-//    
-//    template <uint16_t T_Us>
-//    static void SleepUs() {
-//        Sleep(_TicksForUs(T_Us));
-//    }
-    
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
         const Ticks wakeTime = _CurrentTime+ticks+1;
