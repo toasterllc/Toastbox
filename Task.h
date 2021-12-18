@@ -37,7 +37,7 @@ struct TaskOptions {
     using AutoStart = _AutoStart<T_Opts...>;
 };
 
-template <typename... T_Tasks>
+template <uint32_t T_UsPerTick, typename... T_Tasks>
 class Scheduler {
 public:
     using Ticks = unsigned int;
@@ -135,6 +135,24 @@ public:
     static void Wait() {
         Wait([] { return !Running<T_Task>(); });
     }
+    
+    static void SleepUs(uint16_t us) {
+        Sleep(_TicksForUs(us));
+    }
+    
+    static void SleepMs(uint16_t ms) {
+        Sleep(_TicksForUs(1000*(uint32_t)ms));
+    }
+    
+//    template <uint16_t T_Ms>
+//    static void SleepMs() {
+//        Sleep(_TicksForUs(1000*(uint32_t)T_Ms));
+//    }
+//    
+//    template <uint16_t T_Us>
+//    static void SleepUs() {
+//        Sleep(_TicksForUs(T_Us));
+//    }
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
@@ -270,6 +288,13 @@ private:
     static void _ContNop() {
         // Return to scheduler
         return;
+    }
+    
+    static constexpr Ticks _TicksForUs(uint32_t us) {
+        // We're intentionally not ceiling the result because Sleep() implicitly
+        // ceils by adding one tick (to prevent truncated sleeps), so if this
+        // function ceiled too, we'd always sleep one more tick than needed.
+        return us / T_UsPerTick;
     }
     
     // _GetTask(): returns the _Task& for the given T_Task
