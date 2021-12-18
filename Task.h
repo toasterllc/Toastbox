@@ -136,12 +136,26 @@ public:
         Wait([] { return !Running<T_Task>(); });
     }
     
-    static void SleepUs(uint16_t us) {
-        Sleep(_TicksForUs(us));
+//    static void SleepUs(uint16_t us) {
+//        Sleep(_TicksForUs(us));
+//    }
+//    
+//    static void SleepMs(uint16_t ms) {
+//        Sleep(_TicksForUs(1000*(uint32_t)ms));
+//    }
+    
+    // SleepUs(us) sleep for `us` microseconds
+    // Templated to ensure compile-time conversion from us->ticks
+    template <uint16_t T_Us>
+    static void SleepUs() {
+        Sleep(_TicksForUs(T_Us));
     }
     
-    static void SleepMs(uint16_t ms) {
-        Sleep(_TicksForUs(1000*(uint32_t)ms));
+    // SleepMs(ms) sleep for `ms` microseconds
+    // Templated to ensure compile-time conversion from ms->ticks
+    template <uint16_t T_Ms>
+    static void SleepMs() {
+        Sleep(_TicksForUs(1000*(uint32_t)T_Ms));
     }
     
     // Sleep(ticks): sleep current task for `ticks`
