@@ -43,6 +43,9 @@
         asm volatile("mov.a SP, %0" : "=m" (spSave) : : );              /* (2) */       \
                                                                                         \
         asm volatile("mov.a %0, r11" : : "m" (sp) : "r11");             /* (3) */       \
+        /* Use movx.a instead of mova because the necessary memory<->memory             \
+           addressing mode doesn't exist for mov.a. See TI's documentation              \
+           "1.5.2.6 MSP430X Address Instructions" */                                    \
         asm volatile("movx.a %1, %0" : "=m" (sp) : "m" (spSave) : );    /* (3) */       \
         asm volatile("mov.a r11, %0" : "=m" (spSave) : : );             /* (3) */       \
                                                                                         \
