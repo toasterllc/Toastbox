@@ -81,9 +81,9 @@ public:
                     IntState::SetInterruptsEnabled(false);
                     
                     _CurrentTask = &task;
-                    _SP = _CurrentTask->sp;
+//                    _SP = _CurrentTask->sp;
                     task.cont();
-                    _CurrentTask->sp = _SP;
+//                    _CurrentTask->sp = _SPSave;
                 }
             } while (_DidWork);
             
@@ -219,13 +219,13 @@ private:
     // _TaskSwapInit(): prepare task to be swapped in, and swap it in
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskArchSwap<_SP, _SPSave, true, _TaskStart>();
+        TaskArchSwap<true, _TaskStart>(_CurrentTask->sp, _SP);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        TaskArchSwap<_SP, _SPSave, false, nullptr>();
+        TaskArchSwap<false, nullptr>(_CurrentTask->sp, _SP);
 //        TaskArchSwap(_SP, _SPSave, nullptr);
     }
     
@@ -288,7 +288,7 @@ private:
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
     static inline void* _SP = nullptr;
-    static inline void* _SPSave = nullptr;
+//    static inline void* _SPSave = nullptr;
     
     static inline Ticks _CurrentTime = 0;
     static inline bool _Wake = false;
