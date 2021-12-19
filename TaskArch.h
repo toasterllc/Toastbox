@@ -8,35 +8,35 @@
     template <void*& T_SP, void*& T_SPSave, bool T_Init=false, void T_InitFn(void)=nullptr>
     static void TaskArchSwap() {
         if constexpr (sizeof(void*) == 2) {
-            /* MSP430 small memory model */
+            // MSP430 small memory model
             
-            /* Save regs */
+            // Save regs
             asm volatile("pushm.w #7, r10" : : : );
-            /* Save SP to `T_SPSave` */
+            // Save SP to `T_SPSave`
             asm volatile("mov.w r1, %0" : "=m" (T_SPSave) : : );
             
-            /* Swap `sp` and `T_SPSave`. It's crucial to do this between saving and
-               restoring, to ensure no registers get clobbered:
-                 - Do at beginning: potentially clobber registers before they're saved
-                 - Do at end: potentially clobber registers after they're restored
-            */
+            // Swap `sp` and `T_SPSave`. It's crucial to do this between saving and
+            // restoring, to ensure no registers get clobbered:
+            //   - Do at beginning: potentially clobber registers before they're saved
+            //   - Do at end: potentially clobber registers after they're restored
+           
             std::swap(T_SP, T_SPSave);
             
-            /* Restore SP from `T_SPSave` (`sp` before swap) */
+            // Restore SP from `T_SPSave` (`sp` before swap)
             asm volatile("mov.w %0, r1" : : "m" (T_SPSave) : );
             
             if constexpr (T_Init) {
                 asm volatile("br %0" : : "i" (T_InitFn) : );
             
             } else {
-                /* Restore regs */
+                // Restore regs
                 asm volatile("popm.w #7, r10" : : : );
-                /* Restore PC */
+                // Restore PC
                 asm volatile("ret" : : : );
             }
         
         } else {
-            /* MSP430 large memory model */
+            // MSP430 large memory model
         
         }
     }
