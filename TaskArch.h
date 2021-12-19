@@ -5,26 +5,7 @@
 
 #warning TODO: can we use `sp` instead of `r1`?
 
-    #define TaskArchSwapInit(sp, fn)                                    \
-        if constexpr (sizeof(void*) == 2) {                             \
-            /* MSP430 small memory model */                             \
-                                                                        \
-            /* R4 = SP (save SP because we're about to clobber it) */   \
-            asm volatile("mov.w r1, r4" : : : "r4");                    \
-            /* SP = `sp` (assume supplied stack pointer) */             \
-            asm volatile("mov.w %0, r1" : : "m" (sp) : );               \
-            /* Push PC + registers */                                   \
-            asm volatile("push.w %0" : : "m" (fn) : );                  \
-            asm volatile("pushm.w #7, r10" : : : );                     \
-            /* SP = R4 (restore SP to original value) */                \
-            asm volatile("mov.w r4, r1" : : : );                        \
-                                                                        \
-        } else {                                                        \
-            /* MSP430 large memory model */                             \
-                                                                        \
-        }
-    
-    #define TaskArchSwap(sp, spSave)                                                        \
+    #define TaskArchSwap(sp, spSave, initFn)                                                \
         if constexpr (sizeof(void*) == 2) {                                                 \
             /* MSP430 small memory model */                                                 \
                                                                                             \
@@ -42,10 +23,16 @@
                                                                                             \
             /* Restore SP from `spSave` (`sp` before swap) */                               \
             asm volatile("mov.w %0, r1" : : "m" (spSave) : );                               \
-            /* Restore regs */                                                              \
-            asm volatile("popm.w #7, r10" : : : );                                          \
-            /* Restore PC */                                                                \
-            asm volatile("ret" : : : );                                                     \
+                                                                                            \
+            if (initFn) {                                                                   \
+                asm volatile("jmp %0" : : "i" (initFn) : );                                 \
+                                                                                            \
+            } else {                                                                        \
+                /* Restore regs */                                                          \
+                asm volatile("popm.w #7, r10" : : : );                                      \
+                /* Restore PC */                                                            \
+                asm volatile("ret" : : : );                                                 \
+            }                                                                               \
                                                                                             \
         } else {                                                                            \
             /* MSP430 large memory model */                                                 \

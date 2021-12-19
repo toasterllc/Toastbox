@@ -72,26 +72,26 @@ public:
     static void Run() {
         for (;;) {
             do {
-                IntState::SetInterruptsEnabled(false);
-                
                 _DidWork = false;
                 
                 for (_Task& task : _Tasks) {
-                    _CurrentTask = &task;
-                    
-                    _SP = task.sp;
-                    task.cont();
-                    task.sp = _SP;
-                    
                     // Disable interrupts
                     // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
                     // Regardless, when returning to the scheduler, interrupts need to be disabled.
                     IntState::SetInterruptsEnabled(false);
+                    
+                    _CurrentTask = &task;
+                    _SP = _CurrentTask->sp;
+                    task.cont();
+                    _CurrentTask->sp = _SP;
                 }
             } while (_DidWork);
             
             // Reset _Wake now that we're assured that every task has been able to observe
             // _Wake=true while interrupts were disabled during the entire process.
+            // (If interrupts were enabled, it's because we entered a task, and therefore
+            // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
+            // were entered -> interrupts are still disabled.)
             _Wake = false;
             
             // No work to do
@@ -215,16 +215,16 @@ private:
         _CurrentTask->cont = _TaskNop;
     }
     
-    // _TaskSwapInit(): prepare task to be swapped in
+    // _TaskSwapInit(): prepare task to be swapped in, and swap it in
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskArchSwapInit(_SP, _TaskStart);
+        TaskArchSwap(_SP, _SPSave, _TaskStart);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        TaskArchSwap(_SP, _SPSave);
+        TaskArchSwap(_SP, _SPSave, nullptr);
     }
     
 //    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
