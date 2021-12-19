@@ -19,18 +19,20 @@
 //   (6) Pop callee-saved registers from stack
 //   (7) Restore PC
 
+#if defined(TaskMSP430)
+
 #define TaskSwap(initFn, sp, spSave)                                                    \
                                                                                         \
     if constexpr (sizeof(void*) == 2) {                                                 \
         /* ## Architecture = MSP430, small memory model */                              \
         asm volatile("pushm #7, r10" : : : );                           /* (1) */       \
-        asm volatile("mov SP, %0" : "=m" (spSave) : : );                /* (2) */       \
+        asm volatile("mov sp, %0" : "=m" (spSave) : : );                /* (2) */       \
                                                                                         \
         asm volatile("mov %0, r11" : : "m" (sp) : "r11");               /* (3) */       \
         asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );       /* (3) */       \
         asm volatile("mov r11, %0" : "=m" (spSave) : : );               /* (3) */       \
                                                                                         \
-        asm volatile("mov %0, SP" : : "m" (spSave) : );                 /* (4) */       \
+        asm volatile("mov %0, sp" : : "m" (spSave) : );                 /* (4) */       \
         if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
             asm volatile("br %0" : : "i" (initFn) : );                  /* (5) */       \
         } else {                                                                        \
@@ -40,7 +42,7 @@
     } else {                                                                            \
         /* ## Architecture = MSP430, large memory model */                              \
         asm volatile("pushm.a #7, r10" : : : );                         /* (1) */       \
-        asm volatile("mov.a SP, %0" : "=m" (spSave) : : );              /* (2) */       \
+        asm volatile("mov.a sp, %0" : "=m" (spSave) : : );              /* (2) */       \
                                                                                         \
         asm volatile("mov.a %0, r11" : : "m" (sp) : "r11");             /* (3) */       \
         /* Use movx.a instead of mova because the necessary memory<->memory             \
@@ -49,7 +51,7 @@
         asm volatile("movx.a %1, %0" : "=m" (sp) : "m" (spSave) : );    /* (3) */       \
         asm volatile("mov.a r11, %0" : "=m" (spSave) : : );             /* (3) */       \
                                                                                         \
-        asm volatile("mov.a %0, SP" : : "m" (spSave) : );               /* (4) */       \
+        asm volatile("mov.a %0, sp" : : "m" (spSave) : );               /* (4) */       \
         if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
             asm volatile("br.a %0" : : "i" (initFn) : );                /* (5) */       \
         } else {                                                                        \
@@ -58,6 +60,31 @@
         }                                                                               \
     }
 
+#elif defined(TaskARM32)
+    
+#define TaskSwap(initFn, sp, spSave)                                                    \
+                                                                                        \
+    /* ## Architecture = ARM32 */                                                       \
+    asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
+    asm volatile("str sp, %0" : "=m" (spSave) : : );                    /* (2) */       \
+                                                                                        \
+    asm volatile("mov %0, r0" : : "m" (sp) : "r0");                     /* (3) */       \
+    asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );           /* (3) */       \
+    asm volatile("mov r0, %0" : "=m" (spSave) : : );                    /* (3) */       \
+                                                                                        \
+    asm volatile("ldr sp, %0" : : "m" (spSave) : );                     /* (4) */       \
+    if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \
+        asm volatile("b %0" : : "i" (initFn) : );                       /* (5) */       \
+    } else {                                                                            \
+        asm volatile("pop {r4-r11,lr}" : : : );                         /* (6) */       \
+        asm volatile("bx lr" : : : );                                   /* (7) */       \
+    }
+    
+#else
+    
+    #error Task: Unsupported architecture
+    
+#endif
 
 //template <bool T_Init=false, void T_InitFn(void)=nullptr>
 //static void TaskSwap(void*& sp, void*& spSave) {
