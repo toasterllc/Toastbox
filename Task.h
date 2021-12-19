@@ -218,13 +218,14 @@ private:
     // _TaskSwapInit(): prepare task to be swapped in, and swap it in
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskArchSwap(_SP, _SPSave, _TaskStart);
+        TaskArchSwap<_SP, _SPSave, true, _TaskStart>();
     }
     
     // _TaskSwap(): swaps the current task and the saved task
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        TaskArchSwap(_SP, _SPSave, nullptr);
+        TaskArchSwap<_SP, _SPSave, false, nullptr>();
+//        TaskArchSwap(_SP, _SPSave, nullptr);
     }
     
 //    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
