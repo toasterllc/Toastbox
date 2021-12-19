@@ -1,23 +1,23 @@
 #pragma once
 #include <algorithm>
 
-// (1) Push callee-saved regs onto stack
-// (2) spSave = SP
-// (3) std::swap(sp, spSave)
+// (1) Push callee-saved regs onto stack, including $PC if needed
+// (2) `spSave` = $SP
+// (3) Swap `sp` and `spSave`
 //
 //     It's crucial to perform this swap at this point (between saving and
 //     restoring) to ensure no registers get clobbered:
 //       - Do at beginning: potentially clobber registers before they're saved
 //       - Do at end: potentially clobber registers after they're restored
 //
-// (4) SP = spSave
+// (4) $SP = `spSave`
 //
-// if T_Init:
-//   (5) Jump to `T_InitFn`
+// if `initFn`:
+//   (5) Jump to `initFn`
 //
 // else
 //   (6) Pop callee-saved registers from stack
-//   (7) Restore PC
+//   (7) Return to caller
 
 #if defined(TaskMSP430)
 
@@ -45,7 +45,7 @@
         asm volatile("mov.a sp, %0" : "=m" (spSave) : : );              /* (2) */       \
                                                                                         \
         asm volatile("mov.a %0, r11" : : "m" (sp) : "r11");             /* (3) */       \
-        /* Use movx.a instead of mova because the necessary memory<->memory             \
+        /* Use movx.a instead of mov.a because the necessary memory<->memory            \
            addressing mode doesn't exist for mov.a. See TI's documentation              \
            "1.5.2.6 MSP430X Address Instructions" */                                    \
         asm volatile("movx.a %1, %0" : "=m" (sp) : "m" (spSave) : );    /* (3) */       \
@@ -68,9 +68,10 @@
     asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
     asm volatile("str sp, %0" : "=m" (spSave) : : );                    /* (2) */       \
                                                                                         \
-    asm volatile("mov %0, r0" : : "m" (sp) : "r0");                     /* (3) */       \
-    asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );           /* (3) */       \
-    asm volatile("mov r0, %0" : "=m" (spSave) : : );                    /* (3) */       \
+    asm volatile("ldr r0, %0" : : "m" (sp) : "r0");                     /* (3) */       \
+    asm volatile("ldr r1, %0" : : "m" (spSave) : "r1");                 /* (3) */       \
+    asm volatile("str r0, %0" : "=m" (spSave) : : );                    /* (3) */       \
+    asm volatile("str r1, %0" : "=m" (sp) : : );                        /* (3) */       \
                                                                                         \
     asm volatile("ldr sp, %0" : : "m" (spSave) : );                     /* (4) */       \
     if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \
