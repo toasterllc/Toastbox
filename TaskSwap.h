@@ -1,23 +1,40 @@
 #pragma once
 #include <algorithm>
 
+// (1) Push callee-saved regs onto stack
+// (2) spSave = SP
+// (3) std::swap(sp, spSave)
+//
+//     It's crucial to perform this swap at this point (between saving and
+//     restoring) to ensure no registers get clobbered:
+//       - Do at beginning: potentially clobber registers before they're saved
+//       - Do at end: potentially clobber registers after they're restored
+//
+// (4) SP = spSave
+//
+// if T_Init:
+//   (5) Jump to `T_InitFn`
+//
+// else
+//   (6) Pop callee-saved registers from stack
+//   (7) Restore PC
+
 #define TaskSwap(init, initFn, sp, spSave)                                  \
                                                                             \
     /* ## Architecture = MSP430, small memory model */                      \
-    asm volatile("pushm #7, r10" : : : );                   /* (1) */       \
-    asm volatile("mov SP, %0" : "=m" (spSave) : : );        /* (2) */       \
+    asm volatile("pushm #7, r10" : : : );                       /* (1) */   \
+    asm volatile("mov SP, %0" : "=m" (spSave) : : );            /* (2) */   \
                                                                             \
-    asm volatile("mov %0, r11" : : "m" (sp) : "r11");       /* (3) */       \
-    asm volatile("mov %0, r12" : : "m" (spSave) : "r12");   /* (3) */       \
-    asm volatile("mov r11, %0" : "=m" (spSave) : : );       /* (3) */       \
-    asm volatile("mov r12, %0" : "=m" (sp) : : );           /* (3) */       \
+    asm volatile("mov %0, r11" : : "m" (sp) : "r11");           /* (3) */   \
+    asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );   /* (3) */   \
+    asm volatile("mov r11, %0" : "=m" (spSave) : : );           /* (3) */   \
                                                                             \
-    asm volatile("mov %0, SP" : : "m" (spSave) : );         /* (4) */       \
+    asm volatile("mov %0, SP" : : "m" (spSave) : );             /* (4) */   \
     if constexpr (init) {                                                   \
-        asm volatile("br %0" : : "i" (initFn) : );          /* (5) */       \
+        asm volatile("br %0" : : "i" (initFn) : );              /* (5) */   \
     } else {                                                                \
-        asm volatile("popm #7, r10" : : : );                /* (6) */       \
-        asm volatile("ret" : : : );                         /* (7) */       \
+        asm volatile("popm #7, r10" : : : );                    /* (6) */   \
+        asm volatile("ret" : : : );                             /* (7) */   \
     }
 
 
