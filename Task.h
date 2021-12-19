@@ -81,9 +81,7 @@ public:
                     IntState::SetInterruptsEnabled(false);
                     
                     _CurrentTask = &task;
-//                    _SP = _CurrentTask->sp;
                     task.cont();
-//                    _CurrentTask->sp = _SPSave;
                 }
             } while (_DidWork);
             
@@ -165,7 +163,8 @@ public:
                 _WakeTime = wakeTime;
             }
             
-            // Wait until some task wakes
+            // Wait until we wake because _WakeTime expired (not necessarily
+            // because of this task though)
             do _TaskSwap();
             while (!_Wake);
         

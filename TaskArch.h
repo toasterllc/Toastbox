@@ -26,6 +26,7 @@
             asm volatile("mov.w %0, r1" : : "m" (spSave) : );
             
             if constexpr (T_Init) {
+                // Jump to `T_InitFn`
                 asm volatile("br %0" : : "i" (T_InitFn) : );
             
             } else {
