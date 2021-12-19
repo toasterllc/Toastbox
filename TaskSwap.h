@@ -19,22 +19,40 @@
 //   (6) Pop callee-saved registers from stack
 //   (7) Restore PC
 
-#define TaskSwap(initFn, sp, spSave)                                        \
-                                                                            \
-    /* ## Architecture = MSP430, small memory model */                      \
-    asm volatile("pushm #7, r10" : : : );                       /* (1) */   \
-    asm volatile("mov SP, %0" : "=m" (spSave) : : );            /* (2) */   \
-                                                                            \
-    asm volatile("mov %0, r11" : : "m" (sp) : "r11");           /* (3) */   \
-    asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );   /* (3) */   \
-    asm volatile("mov r11, %0" : "=m" (spSave) : : );           /* (3) */   \
-                                                                            \
-    asm volatile("mov %0, SP" : : "m" (spSave) : );             /* (4) */   \
-    if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {         \
-        asm volatile("br %0" : : "i" (initFn) : );              /* (5) */   \
-    } else {                                                                \
-        asm volatile("popm #7, r10" : : : );                    /* (6) */   \
-        asm volatile("ret" : : : );                             /* (7) */   \
+#define TaskSwap(initFn, sp, spSave)                                                    \
+                                                                                        \
+    if constexpr (sizeof(void*) == 2) {                                                 \
+        /* ## Architecture = MSP430, small memory model */                              \
+        asm volatile("pushm #7, r10" : : : );                           /* (1) */       \
+        asm volatile("mov SP, %0" : "=m" (spSave) : : );                /* (2) */       \
+                                                                                        \
+        asm volatile("mov %0, r11" : : "m" (sp) : "r11");               /* (3) */       \
+        asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );       /* (3) */       \
+        asm volatile("mov r11, %0" : "=m" (spSave) : : );               /* (3) */       \
+                                                                                        \
+        asm volatile("mov %0, SP" : : "m" (spSave) : );                 /* (4) */       \
+        if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
+            asm volatile("br %0" : : "i" (initFn) : );                  /* (5) */       \
+        } else {                                                                        \
+            asm volatile("popm #7, r10" : : : );                        /* (6) */       \
+            asm volatile("ret" : : : );                                 /* (7) */       \
+        }                                                                               \
+    } else {                                                                            \
+        /* ## Architecture = MSP430, large memory model */                              \
+        asm volatile("pushm.a #7, r10" : : : );                         /* (1) */       \
+        asm volatile("mov.a SP, %0" : "=m" (spSave) : : );              /* (2) */       \
+                                                                                        \
+        asm volatile("mov.a %0, r11" : : "m" (sp) : "r11");             /* (3) */       \
+        asm volatile("movx.a %1, %0" : "=m" (sp) : "m" (spSave) : );    /* (3) */       \
+        asm volatile("mov.a r11, %0" : "=m" (spSave) : : );             /* (3) */       \
+                                                                                        \
+        asm volatile("mov.a %0, SP" : : "m" (spSave) : );               /* (4) */       \
+        if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
+            asm volatile("br.a %0" : : "i" (initFn) : );                /* (5) */       \
+        } else {                                                                        \
+            asm volatile("popm.a #7, r10" : : : );                      /* (6) */       \
+            asm volatile("ret.a" : : : );                               /* (7) */       \
+        }                                                                               \
     }
 
 
