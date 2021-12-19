@@ -44,28 +44,12 @@ public:
     using Ticks = unsigned int;
     using TaskFn = void(*)();
     
-//    template <typename T_Task>
-//    static void Start(TaskFn fn) {
-//        _Task& task = _GetTask<T_Task>();
-//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-//        task.cont = _ContStart;
-//        task.start = fn;
-//    }
-//    
-//    template <typename T_Task, TaskFn T_Fn>
-//    static void Start() {
-//        _Task& task = _GetTask<T_Task>();
-//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-//        task.cont = _ContStart;
-//        task.start = T_Fn;
-//    }
-    
     // Start<task,fn>(): starts `task` running with `fn`
     template <typename T_Task, typename T_Fn>
     static void Start(T_Fn&& fn) {
         constexpr _Task& task = _GetTask<T_Task>();
         task.start = fn;
-        task.cont = _ContStart;
+        task.cont = _TaskSwapInit;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
     }
     
@@ -73,14 +57,14 @@ public:
     template <typename T_Task>
     static void Stop() {
         constexpr _Task& task = _GetTask<T_Task>();
-        task.cont = _ContNop;
+        task.cont = _TaskNop;
     }
     
     // Running<task>(): returns whether `task` is running
     template <typename T_Task>
     static bool Running() {
         constexpr _Task& task = _GetTask<T_Task>();
-        return task.cont != _ContNop;
+        return task.cont != _TaskNop;
     }
     
     // Run(): run the tasks indefinitely
@@ -91,9 +75,18 @@ public:
                 IntState::SetInterruptsEnabled(false);
                 
                 _DidWork = false;
+                
                 for (_Task& task : _Tasks) {
                     _CurrentTask = &task;
+                    
+                    _SP = task.sp;
                     task.cont();
+                    task.sp = _SP;
+                    
+                    // Disable interrupts
+                    // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
+                    // Regardless, when returning to the scheduler, interrupts need to be disabled.
+                    IntState::SetInterruptsEnabled(false);
                 }
             } while (_DidWork);
             
@@ -109,7 +102,9 @@ public:
     
     // Yield(): yield current task to the scheduler
     static void Yield() {
-        _TaskPause();
+        // Return to scheduler
+        _TaskSwap();
+        // Return to task
         _TaskStartWork();
     }
     
@@ -122,7 +117,7 @@ public:
         for (;;) {
             const auto r = fn();
             if (!r) {
-                _TaskPause();
+                _TaskSwap();
                 continue;
             }
             
@@ -171,7 +166,7 @@ public:
             }
             
             // Wait until some task wakes
-            do _TaskPause();
+            do _TaskSwap();
             while (!_Wake);
         
         } while (_CurrentTime != wakeTime);
@@ -209,68 +204,51 @@ private:
     }
     
     static void _TaskStart() {
-        // Future invocations should execute _ContResume
-        _CurrentTask->cont = _ContResume;
+        // Future invocations should invoke _TaskSwap
+        _CurrentTask->cont = _TaskSwap;
         // Signal that we did work
         _TaskStartWork();
         // Invoke task function
         _CurrentTask->start();
         // The task finished
         // Future invocations should do nothing
-        _CurrentTask->cont = _ContNop;
+        _CurrentTask->cont = _TaskNop;
     }
     
+    // _TaskSwapInit(): prepare task to be swapped in
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void _TaskPause() {
-        // Save task regs
-        TaskSaveRegs();
-        // Save task SP
-        TaskSaveSP(_CurrentTask->sp);
-        // Disable interrupts
-        // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
-        // Regardless, when returning to the scheduler, interrupts need to be disabled.
-        IntState::SetInterruptsEnabled(false);
-        // Restore scheduler SP
-        TaskRestoreSP(_SP);
-        // Restore scheduler regs
-        TaskRestoreRegs();
-        // Restore scheduler PC
-        TaskRestorePC();
+    static void _TaskSwapInit() {
+        TaskArchSwapInit(_SP, _TaskStart);
     }
     
+    // _TaskSwap(): swaps the current task and the saved task
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void _ContStart() {
-        // Save scheduler regs
-        TaskSaveRegs();
-        // Save scheduler SP
-        TaskSaveSP(_SP);
-        // Restore task SP
-        TaskRestoreSP(_CurrentTask->sp);
-        // Run task
-        _TaskStart();
-        // Restore scheduler SP
-        TaskRestoreSP(_SP);
-        // Restore scheduler regs
-        TaskRestoreRegs();
-        // Restore scheduler PC
-        TaskRestorePC();
+    static void _TaskSwap() {
+        TaskArchSwap(_SP, _SPSave);
     }
     
-    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void _ContResume() {
-        // Save scheduler regs
-        TaskSaveRegs();
-        // Save scheduler SP
-        TaskSaveSP(_SP);
-        // Restore task SP
-        TaskRestoreSP(_CurrentTask->sp);
-        // Restore task regs
-        TaskRestoreRegs();
-        // Restore task PC
-        TaskRestorePC();
-    }
+//    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
+//    static void _TaskInit() {
+//        TaskPrepare();
+//        TaskSwap();
+//        
+//        _TaskSwap();
+//        
+//        // Save scheduler regs
+//        // Save scheduler SP
+//        // Restore task SP
+//        TaskPrologue(_SP, _CurrentTask->sp);
+//        
+//        // Run task
+//        _TaskStart();
+//        
+//        // Restore scheduler SP
+//        // Restore scheduler regs
+//        // Restore scheduler PC
+//        TaskEpilogue(_SP);
+//    }
     
-    static void _ContNop() {
+    static void _TaskNop() {
         // Return to scheduler
         return;
     }
@@ -301,13 +279,14 @@ private:
     
     static inline _Task _Tasks[] = {_Task{
         .start = T_Tasks::Options::AutoStart::Fn,
-        .cont = T_Tasks::Options::AutoStart::Valid ? _ContStart : _ContNop,
+        .cont = T_Tasks::Options::AutoStart::Valid ? _TaskSwapInit : _TaskNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
-    static inline void* _SP = nullptr; // Saved stack pointer
+    static inline void* _SP = nullptr;
+    static inline void* _SPSave = nullptr;
     
     static inline Ticks _CurrentTime = 0;
     static inline bool _Wake = false;
