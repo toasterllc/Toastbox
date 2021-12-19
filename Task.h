@@ -1,7 +1,7 @@
 #pragma once
 #include <type_traits>
 #include "Toastbox/IntState.h"
-#include "Toastbox/TaskArch.h"
+#include "Toastbox/TaskSwap.h"
 
 namespace Toastbox {
 
@@ -212,42 +212,21 @@ private:
         // The task finished
         // Future invocations should do nothing
         _CurrentTask->cont = _TaskNop;
-        #warning test what happens when a thread exits, we need to yield here right?
+        // Return to scheduler
+        _TaskSwap();
     }
     
-    // _TaskSwapInit(): prepare task to be swapped in, and swap it in
+    // _TaskSwapInit(): swap task in and jump to _TaskStart
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskArchSwap<true, _TaskStart>(_CurrentTask->sp, _SP);
+        TaskSwap<true, _TaskStart>(_CurrentTask->sp, _SP);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        TaskArchSwap<false, nullptr>(_CurrentTask->sp, _SP);
-//        TaskArchSwap(_SP, _SPSave, nullptr);
+        TaskSwap<false, nullptr>(_CurrentTask->sp, _SP);
     }
-    
-//    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-//    static void _TaskInit() {
-//        TaskPrepare();
-//        TaskSwap();
-//        
-//        _TaskSwap();
-//        
-//        // Save scheduler regs
-//        // Save scheduler SP
-//        // Restore task SP
-//        TaskPrologue(_SP, _CurrentTask->sp);
-//        
-//        // Run task
-//        _TaskStart();
-//        
-//        // Restore scheduler SP
-//        // Restore scheduler regs
-//        // Restore scheduler PC
-//        TaskEpilogue(_SP);
-//    }
     
     static void _TaskNop() {
         // Return to scheduler
@@ -287,7 +266,6 @@ private:
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
     static inline void* _SP = nullptr;
-//    static inline void* _SPSave = nullptr;
     
     static inline Ticks _CurrentTime = 0;
     static inline bool _Wake = false;
