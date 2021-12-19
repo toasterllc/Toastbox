@@ -213,6 +213,7 @@ private:
         // The task finished
         // Future invocations should do nothing
         _CurrentTask->cont = _TaskNop;
+        #warning test what happens when a thread exits, we need to yield here right?
     }
     
     // _TaskSwapInit(): prepare task to be swapped in, and swap it in
