@@ -219,7 +219,7 @@ private:
     // _TaskSwapInit(): swap task in and jump to _TaskStart
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskSwap(true, _TaskStart, _CurrentTask->sp, _SP);
+        TaskSwap(_TaskStart, _CurrentTask->sp, _SP);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
@@ -233,7 +233,7 @@ private:
 //        asm volatile("pop {r4-r11,LR}" : : : );             // (6)
 //        asm volatile("bx LR" : : : );                       // (7)
         
-        TaskSwap(false, _TaskStart, _CurrentTask->sp, _SP);
+        TaskSwap(nullptr, _CurrentTask->sp, _SP);
     }
     
     static void _TaskNop() {
