@@ -1,6 +1,9 @@
 #pragma once
 #include <algorithm>
 
+// TaskSwap(): architecture-specific implementation that swaps the current
+// task with a different task.
+//
 // (1) Push callee-saved regs onto stack, including $PC if needed
 // (2) `spSave` = $SP
 // (3) Swap `sp` and `spSave`
@@ -20,6 +23,11 @@
 //   (7) Return to caller
 
 #if defined(TaskMSP430)
+
+#warning TODO: try implementing as an actual function again, using:
+#warning TODO:   template <T_InitFn>
+#warning TODO:   [[gnu::always_inline]] static inline TaskSwap(void*& sp, void*& spSave)
+#warning TODO:   how do the emitted instructions compare with a macro?
 
 #define TaskSwap(initFn, sp, spSave)                                                    \
                                                                                         \
@@ -61,7 +69,18 @@
     }
 
 #elif defined(TaskARM32)
-    
+
+[[gnu::always_inline]]
+static inline void _ToggleSPSEL() {
+    asm volatile("mrs r0, CONTROL");
+    asm volatile("eor.w	r0, r0, #2");
+    asm volatile("msr CONTROL, r0");
+    // "When changing the stack pointer, software must use an ISB instruction immediately
+    // after the MSR instruction. This ensures that instructions after the ISB instruction
+    // execute using the new stack pointer"
+    asm volatile("isb");
+}
+
 #define TaskSwap(initFn, sp, spSave)                                                    \
                                                                                         \
     /* ## Architecture = ARM32 */                                                       \
@@ -72,6 +91,24 @@
     asm volatile("ldr r1, %0" : : "m" (spSave) : "r1");                 /* (3) */       \
     asm volatile("str r0, %0" : "=m" (spSave) : : );                    /* (3) */       \
     asm volatile("str r1, %0" : "=m" (sp) : : );                        /* (3) */       \
+                                                                                        \
+    /* Toggle between the main stack pointer (MSP) and process stack pointer (PSP)      \
+      when swapping tasks:                                                              \
+                                                                                        \
+        Entering task (exiting scheduler): use PSP                                      \
+        Entering scheduler (exiting task): use MSP                                      \
+                                                                                        \
+      This makes the hardware enforce separation between the single main stack          \
+      (used for running the scheduler + handling interrupts) and the tasks'             \
+      stacks.                                                                           \
+                                                                                        \
+      This scheme is mainly important for interrupt handling: if an interrupt occurs    \
+      while a task is running, it'll execute using the main stack, *not the task's      \
+      stack*. This is important because the task's stack size can be much smaller       \
+      than certain interrupt handlers require; the STM32 USB interrupt handlers         \
+      needs lots of stack space, for example. */                                        \
+                                                                                        \
+    _ToggleSPSEL();                                                                     \
                                                                                         \
     asm volatile("ldr sp, %0" : : "m" (spSave) : );                     /* (4) */       \
     if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \

@@ -265,14 +265,15 @@ private:
         return T_Task::Options::template Exists<T_Option>();
     }
     
+#warning TODO: remove public after finished debugging
+public:
+    
     static inline _Task _Tasks[] = {_Task{
         .run = T_Tasks::Options::AutoStart::Fn,
         .cont = T_Tasks::Options::AutoStart::Valid ? _TaskSwapInit : _TaskNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
-#warning TODO: remove public after finished debugging
-public:
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
     static inline void* _SP = nullptr;
