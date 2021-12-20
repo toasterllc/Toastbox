@@ -16,69 +16,6 @@
 
 #if defined(TaskMSP430)
 
-#warning TODO: try implementing as an actual function again, using:
-#warning TODO:   template <T_InitFn>
-#warning TODO:   [[gnu::always_inline]] static inline TaskSwap(void*& sp)
-#warning TODO:   how do the emitted instructions compare with a macro?
-
-//template <void T_InitFn()>
-//static inline void TaskSwap(void*& sp) {
-//    /* ## Architecture = MSP430, small memory model */
-////    if constexpr (!std::is_null_pointer<decltype(T_InitFn)>::value) {
-////        asm volatile(
-////            "pushm #7, r10      \n"
-////            "mov sp, r11        \n"
-////            "mov %[spIn], sp    \n"
-////            "mov r11, %[spOut]  \n"
-////            "br %[initFn]       \n"                     :
-////            [spOut] "=m" (sp)                           :   // Outputs
-////            [spIn] "m" (sp), [initFn] "i" (T_InitFn)    :   // Inputs
-////            "r4","r5","r6","r7","r8","r9","r10","r11"       // Clobbers
-////        );
-////    } else {
-////        asm volatile(
-////            "pushm #7, r10      \n"
-////            "mov sp, r11        \n"
-////            "mov %[spIn], sp    \n"
-////            "mov r11, %[spOut]  \n"
-////            "popm #7, r10       \n"
-////            "ret                \n"                     :
-////            [spOut] "=m" (sp)                           :   // Outputs
-////            [spIn] "m" (sp)                             :   // Inputs
-////            "r4","r5","r6","r7","r8","r9","r10","r11"       // Clobbers
-////        );
-////    }
-////    
-//    
-////    asm volatile("" : : : "r4","r5","r6","r7","r8","r9","r10","r11");
-////    __asm__("pushm #7, r10" : : : "r4","r5","r6","r7","r8","r9","r10","r11");                           /* (1) */
-////    __asm__("mov %0, r11" : : "m" (sp) : );
-//    
-//    
-//    asm volatile("pushm #7, r10" : : : );                           /* (1) */
-//    asm volatile("mov sp, r11" : : : "r11");                        /* (2) */
-//    asm volatile("mov %0, sp" : : "m" (sp) : );                     /* (3) */
-//    asm volatile("mov r11, %0" : "=m" (sp) : : );                   /* (4) */
-//    if constexpr (!std::is_null_pointer<decltype(T_InitFn)>::value) {
-//        asm volatile("br %0" : : "i" (T_InitFn) : );                /* (5) */
-//    } else {
-//        asm volatile("popm #7, r10" : : : );                        /* (6) */
-//        asm volatile("ret" : : : );                                 /* (7) */
-//    }
-//    
-//    
-////    asm volatile("pushm #7, r10" : : : );                           /* (1) */
-////    asm volatile("mov sp, r11" : : : "r11");                        /* (2) */
-////    asm volatile("mov %0, sp" : : "m" (sp) : );                     /* (3) */
-////    asm volatile("mov r11, %0" : "=m" (sp) : : );                   /* (4) */
-////    if constexpr (!std::is_null_pointer<decltype(T_InitFn)>::value) {
-////        asm volatile("br %0" : : "i" (T_InitFn) : );                /* (5) */
-////    } else {
-////        asm volatile("popm #7, r10" : : : );                        /* (6) */
-////        asm volatile("ret" : : : );                                 /* (7) */
-////    }
-//}
-
 #define TaskSwap(initFn, sp)                                                            \
                                                                                         \
     if constexpr (sizeof(void*) == 2) {                                                 \
