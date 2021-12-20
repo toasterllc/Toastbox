@@ -6,18 +6,10 @@
 //
 // (1) Push callee-saved regs onto stack, including $PC if needed
 // (2) `spSave` = $SP
-// (3) Swap `sp` and `spSave`
-#warning TODO: can't we just swap using a scratch register that doesnt need to be restored? that way we can move the swap to the end, and remove this long comment
-//     Since this swap process will likely require using a registerIt's crucial to perform this swap at this point (between saving and
-//     restoring) to ensure no registers get clobbered:
-//       - Do at beginning: potentially clobber registers before they're saved
-//       - Do at end: potentially clobber registers after they're restored
-//
-// (4) $SP = `spSave`
-//
+// (3) $SP = `sp`
+// (4) Swap `sp` and `spSave`
 // if `initFn`:
 //   (5) Jump to `initFn`
-//
 // else
 //   (6) Pop callee-saved registers from stack
 //   (7) Return to caller
@@ -35,12 +27,10 @@
         /* ## Architecture = MSP430, small memory model */                              \
         asm volatile("pushm #7, r10" : : : );                           /* (1) */       \
         asm volatile("mov sp, %0" : "=m" (spSave) : : );                /* (2) */       \
-                                                                                        \
-        asm volatile("mov %0, r11" : : "m" (sp) : "r11");               /* (3) */       \
-        asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );       /* (3) */       \
-        asm volatile("mov r11, %0" : "=m" (spSave) : : );               /* (3) */       \
-                                                                                        \
-        asm volatile("mov %0, sp" : : "m" (spSave) : );                 /* (4) */       \
+        asm volatile("mov %0, sp" : : "m" (sp) : );                     /* (3) */       \
+        asm volatile("mov %0, r11" : : "m" (sp) : "r11");               /* (4) */       \
+        asm volatile("mov %1, %0" : "=m" (sp) : "m" (spSave) : );       /* (4) */       \
+        asm volatile("mov r11, %0" : "=m" (spSave) : : );               /* (4) */       \
         if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
             asm volatile("br %0" : : "i" (initFn) : );                  /* (5) */       \
         } else {                                                                        \
@@ -51,15 +41,13 @@
         /* ## Architecture = MSP430, large memory model */                              \
         asm volatile("pushm.a #7, r10" : : : );                         /* (1) */       \
         asm volatile("mov.a sp, %0" : "=m" (spSave) : : );              /* (2) */       \
-                                                                                        \
-        asm volatile("mov.a %0, r11" : : "m" (sp) : "r11");             /* (3) */       \
+        asm volatile("mov.a %0, sp" : : "m" (sp) : );                   /* (3) */       \
+        asm volatile("mov.a %0, r11" : : "m" (sp) : "r11");             /* (4) */       \
         /* Use movx.a instead of mov.a because the necessary memory<->memory            \
            addressing mode doesn't exist for mov.a. See TI's documentation              \
            "1.5.2.6 MSP430X Address Instructions" */                                    \
-        asm volatile("movx.a %1, %0" : "=m" (sp) : "m" (spSave) : );    /* (3) */       \
-        asm volatile("mov.a r11, %0" : "=m" (spSave) : : );             /* (3) */       \
-                                                                                        \
-        asm volatile("mov.a %0, sp" : : "m" (spSave) : );               /* (4) */       \
+        asm volatile("movx.a %1, %0" : "=m" (sp) : "m" (spSave) : );    /* (4) */       \
+        asm volatile("mov.a r11, %0" : "=m" (spSave) : : );             /* (4) */       \
         if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
             asm volatile("br.a %0" : : "i" (initFn) : );                /* (5) */       \
         } else {                                                                        \
@@ -87,11 +75,6 @@ static inline void _ToggleSPSEL() {
     asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
     asm volatile("str sp, %0" : "=m" (spSave) : : );                    /* (2) */       \
                                                                                         \
-    asm volatile("ldr r0, %0" : : "m" (sp) : "r0");                     /* (3) */       \
-    asm volatile("ldr r1, %0" : : "m" (spSave) : "r1");                 /* (3) */       \
-    asm volatile("str r0, %0" : "=m" (spSave) : : );                    /* (3) */       \
-    asm volatile("str r1, %0" : "=m" (sp) : : );                        /* (3) */       \
-                                                                                        \
     /* Toggle between the main stack pointer (MSP) and process stack pointer (PSP)      \
        when swapping tasks:                                                             \
                                                                                         \
@@ -110,7 +93,11 @@ static inline void _ToggleSPSEL() {
                                                                                         \
     _ToggleSPSEL();                                                                     \
                                                                                         \
-    asm volatile("ldr sp, %0" : : "m" (spSave) : );                     /* (4) */       \
+    asm volatile("ldr sp, %0" : : "m" (sp) : );                         /* (3) */       \
+    asm volatile("ldr r0, %0" : : "m" (sp) : "r0");                     /* (4) */       \
+    asm volatile("ldr r1, %0" : : "m" (spSave) : "r1");                 /* (4) */       \
+    asm volatile("str r0, %0" : "=m" (spSave) : : );                    /* (4) */       \
+    asm volatile("str r1, %0" : "=m" (sp) : : );                        /* (4) */       \
     if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \
         asm volatile("b %0" : : "i" (initFn) : );                       /* (5) */       \
     } else {                                                                            \
