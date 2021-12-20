@@ -7,8 +7,8 @@
 // (1) Push callee-saved regs onto stack, including $PC if needed
 // (2) `spSave` = $SP
 // (3) Swap `sp` and `spSave`
-//
-//     It's crucial to perform this swap at this point (between saving and
+#warning TODO: can't we just swap using a scratch register that doesnt need to be restored? that way we can move the swap to the end, and remove this long comment
+//     Since this swap process will likely require using a registerIt's crucial to perform this swap at this point (between saving and
 //     restoring) to ensure no registers get clobbered:
 //       - Do at beginning: potentially clobber registers before they're saved
 //       - Do at end: potentially clobber registers after they're restored
@@ -93,7 +93,7 @@ static inline void _ToggleSPSEL() {
     asm volatile("str r1, %0" : "=m" (sp) : : );                        /* (3) */       \
                                                                                         \
     /* Toggle between the main stack pointer (MSP) and process stack pointer (PSP)      \
-      when swapping tasks:                                                              \
+       when swapping tasks:                                                             \
                                                                                         \
         Entering task (exiting scheduler): use PSP                                      \
         Entering scheduler (exiting task): use MSP                                      \
@@ -105,8 +105,8 @@ static inline void _ToggleSPSEL() {
       This scheme is mainly important for interrupt handling: if an interrupt occurs    \
       while a task is running, it'll execute using the main stack, *not the task's      \
       stack*. This is important because the task's stack size can be much smaller       \
-      than certain interrupt handlers require; the STM32 USB interrupt handlers         \
-      needs lots of stack space, for example. */                                        \
+      than certain interrupt handlers require. (For example, the STM32 USB interrupt    \
+      handlers need lots of stack space.) */                                            \
                                                                                         \
     _ToggleSPSEL();                                                                     \
                                                                                         \
