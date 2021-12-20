@@ -48,7 +48,7 @@ public:
     template <typename T_Task, typename T_Fn>
     static void Start(T_Fn&& fn) {
         constexpr _Task& task = _GetTask<T_Task>();
-        task.start = fn;
+        task.run = fn;
         task.cont = _TaskSwapInit;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
     }
@@ -191,7 +191,7 @@ public:
     
 private:
     struct _Task {
-        TaskFn start = nullptr;
+        TaskFn run = nullptr;
         TaskFn cont = nullptr;
         void* sp = nullptr;
     };
@@ -208,7 +208,7 @@ private:
         // Signal that we did work
         _TaskStartWork();
         // Invoke task function
-        _CurrentTask->start();
+        _CurrentTask->run();
         // The task finished
         // Future invocations should do nothing
         _CurrentTask->cont = _TaskNop;
@@ -266,11 +266,13 @@ private:
     }
     
     static inline _Task _Tasks[] = {_Task{
-        .start = T_Tasks::Options::AutoStart::Fn,
+        .run = T_Tasks::Options::AutoStart::Fn,
         .cont = T_Tasks::Options::AutoStart::Valid ? _TaskSwapInit : _TaskNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
     }...};
     
+#warning TODO: remove public after finished debugging
+public:
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
     static inline void* _SP = nullptr;
