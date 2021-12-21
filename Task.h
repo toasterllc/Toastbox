@@ -48,12 +48,9 @@ public:
     template <typename T_Task, typename T_Fn>
     static void Start(T_Fn&& fn) {
         constexpr _Task& task = _GetTask<T_Task>();
-        task = _Task{
-            .run = fn,
-            .cont = _TaskSwapInit,
-            .sp = T_Task::Stack + sizeof(T_Task::Stack),
-            .stackGuard = T_Task::Stack[0],
-        };
+        task.run = fn;
+        task.cont = _TaskSwapInit;
+        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
     }
     
     // Stop<task>(): stops `task`
