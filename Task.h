@@ -1,5 +1,6 @@
 #pragma once
 #include <type_traits>
+#include <cstdlib>
 #include "Toastbox/IntState.h"
 #include "Toastbox/TaskSwap.h"
 
@@ -40,7 +41,8 @@ struct TaskOptions {
 
 template <
     uint32_t T_UsPerTick,
-    bool T_StackGuard,
+    auto T_MainStack,
+    size_t T_StackGuardSize,
     typename... T_Tasks
 >
 class Scheduler {
@@ -74,10 +76,11 @@ public:
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
-        // Initialize every task's stack guard
-        if constexpr (T_StackGuard) {
+        // Initialize the main stack guard and each task's stack guard
+        if constexpr (T_StackGuardSize) {
+            _StackGuardInit(_MainStackGuard);
             for (_Task& task : _Tasks) {
-                task.stackGuard = _StackGuardMagicNumber;
+                _StackGuardInit(task.stackGuard);
             }
         }
         
@@ -94,11 +97,10 @@ public:
                     _CurrentTask = &task;
                     task.cont();
                     
-                    // Validate stack guard value
-                    if constexpr (T_StackGuard) {
-                        if (_CurrentTask->stackGuard != _StackGuardMagicNumber) {
-                            abort();
-                        }
+                    // Check stack guards
+                    if constexpr (T_StackGuardSize) {
+                        _StackGuardCheck(_MainStackGuard);
+                        _StackGuardCheck(task.stackGuard);
                     }
                 }
             } while (_DidWork);
@@ -208,11 +210,28 @@ public:
     }
     
 private:
+    static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
+    using _StackGuard = uintptr_t[T_StackGuardSize];
+    
+    static void _StackGuardInit(_StackGuard& guard) {
+        for (uintptr_t& x : guard) {
+            x = _StackGuardMagicNumber;
+        }
+    }
+    
+    static void _StackGuardCheck(const _StackGuard& guard) {
+        for (const uintptr_t& x : guard) {
+            if (x != _StackGuardMagicNumber) {
+                abort();
+            }
+        }
+    }
+    
     struct _Task {
         TaskFn run = nullptr;
         TaskFn cont = nullptr;
         void* sp = nullptr;
-        uint8_t& stackGuard;
+        _StackGuard& stackGuard;
     };
     
     static void _TaskStartWork() {
@@ -286,14 +305,17 @@ private:
     
 #warning TODO: remove public after finished debugging
 public:
-    static constexpr uint8_t _StackGuardMagicNumber = 0x55;
-    
     static inline _Task _Tasks[] = {_Task{
         .run = T_Tasks::Options::AutoStart::Fn,
         .cont = T_Tasks::Options::AutoStart::Valid ? _TaskSwapInit : _TaskNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
-        .stackGuard = T_Tasks::Stack[0],
+        .stackGuard = *(_StackGuard*)T_Tasks::Stack,
     }...};
+    
+    // _MainStackGuard: ideally this would be `static constexpr` instead of `static inline`,
+    // but C++ doesn't allow constexpr reinterpret_cast.
+    // In C++20 we could use std::bit_cast for this.
+    static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
