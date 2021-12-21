@@ -50,7 +50,7 @@
                                                                                         \
     /* ## Architecture = ARM32 */                                                       \
     asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
-    asm volatile("str sp, r0" : : : );                                  /* (2) */       \
+    asm volatile("mov r0, sp" : : : );                                  /* (2) */       \
                                                                                         \
     /* Toggle between the main stack pointer (MSP) and process stack pointer (PSP)      \
        when swapping tasks:                                                             \
