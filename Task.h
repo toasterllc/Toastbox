@@ -38,7 +38,7 @@ struct TaskOptions {
     using AutoStart = _AutoStart<T_Opts...>;
 };
 
-template <uint32_t T_UsPerTick, typename... T_Tasks>
+template <uint32_t T_UsPerTick, bool T_StackGuard, typename... T_Tasks>
 class Scheduler {
 public:
     using Ticks = unsigned int;
@@ -48,9 +48,12 @@ public:
     template <typename T_Task, typename T_Fn>
     static void Start(T_Fn&& fn) {
         constexpr _Task& task = _GetTask<T_Task>();
-        task.run = fn;
-        task.cont = _TaskSwapInit;
-        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
+        task = _Task{
+            .run = fn,
+            .cont = _TaskSwapInit,
+            .sp = T_Task::Stack + sizeof(T_Task::Stack),
+            .stackGuard = T_Task::Stack[0],
+        };
     }
     
     // Stop<task>(): stops `task`
@@ -82,6 +85,13 @@ public:
                     
                     _CurrentTask = &task;
                     task.cont();
+                    
+                    // Validate stack guard value
+                    if constexpr (T_StackGuard) {
+                        if (_CurrentTask->stackGuard != _StackGuardMagicNumber) {
+                            abort();
+                        }
+                    }
                 }
             } while (_DidWork);
             
@@ -194,6 +204,7 @@ private:
         TaskFn run = nullptr;
         TaskFn cont = nullptr;
         void* sp = nullptr;
+        uint8_t& stackGuard;
     };
     
     static void _TaskStartWork() {
@@ -203,6 +214,11 @@ private:
     }
     
     static void _TaskStart() {
+        // Initialize stack guard value
+        if constexpr (T_StackGuard) {
+            _CurrentTask->stackGuard = _StackGuardMagicNumber;
+        }
+        
         // Future invocations should invoke _TaskSwap
         _CurrentTask->cont = _TaskSwap;
         // Signal that we did work
@@ -267,11 +283,13 @@ private:
     
 #warning TODO: remove public after finished debugging
 public:
+    static constexpr uint8_t _StackGuardMagicNumber = 0x55;
     
     static inline _Task _Tasks[] = {_Task{
         .run = T_Tasks::Options::AutoStart::Fn,
         .cont = T_Tasks::Options::AutoStart::Valid ? _TaskSwapInit : _TaskNop,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
+        .stackGuard = T_Tasks::Stack[0],
     }...};
     
     static inline bool _DidWork = false;
