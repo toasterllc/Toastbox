@@ -70,6 +70,13 @@ public:
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
+        // Initialize every task's stack guard
+        if constexpr (T_StackGuard) {
+            for (_Task& task : _Tasks) {
+                task.stackGuard = _StackGuardMagicNumber;
+            }
+        }
+        
         for (;;) {
             do {
                 _DidWork = false;
@@ -211,11 +218,6 @@ private:
     }
     
     static void _TaskStart() {
-        // Initialize stack guard value
-        if constexpr (T_StackGuard) {
-            _CurrentTask->stackGuard = _StackGuardMagicNumber;
-        }
-        
         // Future invocations should invoke _TaskSwap
         _CurrentTask->cont = _TaskSwap;
         // Signal that we did work
