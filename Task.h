@@ -38,7 +38,11 @@ struct TaskOptions {
     using AutoStart = _AutoStart<T_Opts...>;
 };
 
-template <uint32_t T_UsPerTick, bool T_StackGuard, typename... T_Tasks>
+template <
+    uint32_t T_UsPerTick,
+    bool T_StackGuard,
+    typename... T_Tasks
+>
 class Scheduler {
 public:
     using Ticks = unsigned int;

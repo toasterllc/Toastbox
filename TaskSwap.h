@@ -1,5 +1,4 @@
 #pragma once
-#include <algorithm>
 
 // TaskSwap(): architecture-specific implementation that swaps the current
 // task with a different task.
