@@ -1,5 +1,6 @@
 #pragma once
 #include <type_traits>
+#include <cstdint>
 #include <cstdlib>
 #include "Toastbox/IntState.h"
 #include "Toastbox/TaskSwap.h"
