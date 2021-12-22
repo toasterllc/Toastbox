@@ -58,6 +58,10 @@ public:
         task.run = fn;
         task.cont = _TaskSwapInit;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
+        
+        if constexpr (_Exists<T_Task, _WillStartExists>::value) {
+            T_Task::WillStart();
+        }
     }
     
     // Stop<task>(): stops `task`
@@ -65,6 +69,10 @@ public:
     static void Stop() {
         constexpr _Task& task = _GetTask<T_Task>();
         task.cont = _TaskNop;
+        
+        if constexpr (_Exists<T_Task, _DidStopExists>::value) {
+            T_Task::DidStop();
+        }
     }
     
     // Running<task>(): returns whether `task` is running
@@ -211,8 +219,34 @@ public:
     }
     
 private:
+    // MARK: - Types
+    
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
     using _StackGuard = uintptr_t[T_StackGuardCount];
+    
+    struct _Task {
+        TaskFn run = nullptr;
+        TaskFn cont = nullptr;
+        void* sp = nullptr;
+        _StackGuard& stackGuard;
+    };
+    
+    template <typename, typename T_Type, template<typename> typename T_Detector>
+    struct __Exists : std::false_type {};
+    
+    template <typename T_Type, template<typename> typename T_Detector>
+    struct __Exists<std::void_t<T_Detector<T_Type>>, T_Type, T_Detector> : std::true_type {};
+    
+    template <typename T_Type, template<typename> typename T_Member>
+    using _Exists = typename __Exists<void, T_Type, T_Member>::type;
+    
+    template <typename T_Type>
+    using _WillStartExists = decltype(T_Type::WillStart);
+    
+    template <typename T_Type>
+    using _DidStopExists = decltype(T_Type::DidStop);
+    
+    // MARK: - Stack Guard
     
     static void _StackGuardInit(_StackGuard& guard) {
         for (uintptr_t& x : guard) {
@@ -227,13 +261,6 @@ private:
             }
         }
     }
-    
-    struct _Task {
-        TaskFn run = nullptr;
-        TaskFn cont = nullptr;
-        void* sp = nullptr;
-        _StackGuard& stackGuard;
-    };
     
     static void _TaskStartWork() {
         _DidWork = true;
@@ -265,13 +292,6 @@ private:
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
         // ## Architecture = ARM32, large memory model
-//        asm volatile("push {r4-r11,LR}" : : : );                // (1)
-//        asm volatile("str SP, %0" : "=m" (spSave) : : );        // (2)
-//        std::swap(sp, spSave);                                  // (3)
-//        asm volatile("ldr SP, %0" : : "m" (spSave) : );         // (4)
-//        asm volatile("pop {r4-r11,LR}" : : : );             // (6)
-//        asm volatile("bx LR" : : : );                       // (7)
-        
         TaskSwap(nullptr, _CurrentTask->sp);
     }
     
