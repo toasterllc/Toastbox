@@ -40,10 +40,10 @@ struct TaskOptions {
 };
 
 template <
-    uint32_t T_UsPerTick,
-    auto T_MainStack,
-    size_t T_StackGuardSize,
-    typename... T_Tasks
+    uint32_t T_UsPerTick,       // Microseconds per tick
+    auto T_MainStack,           // Main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
+    size_t T_StackGuardCount,   // Number of pointer-sized stack guard elements to use
+    typename... T_Tasks         // List of tasks
 >
 class Scheduler {
 public:
@@ -77,7 +77,7 @@ public:
     [[noreturn]]
     static void Run() {
         // Initialize the main stack guard and each task's stack guard
-        if constexpr (T_StackGuardSize) {
+        if constexpr (T_StackGuardCount) {
             _StackGuardInit(_MainStackGuard);
             for (_Task& task : _Tasks) {
                 _StackGuardInit(task.stackGuard);
@@ -98,7 +98,7 @@ public:
                     task.cont();
                     
                     // Check stack guards
-                    if constexpr (T_StackGuardSize) {
+                    if constexpr (T_StackGuardCount) {
                         _StackGuardCheck(_MainStackGuard);
                         _StackGuardCheck(task.stackGuard);
                     }
@@ -211,7 +211,7 @@ public:
     
 private:
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
-    using _StackGuard = uintptr_t[T_StackGuardSize];
+    using _StackGuard = uintptr_t[T_StackGuardCount];
     
     static void _StackGuardInit(_StackGuard& guard) {
         for (uintptr_t& x : guard) {
