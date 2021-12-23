@@ -9,35 +9,10 @@ namespace Toastbox {
 
 using TaskFn = void(*)();
 
-struct TaskOption {
-    template <TaskFn T_Fn>
-    struct AutoStart;
-};
-
-template <typename... T_Opts>
 struct TaskOptions {
-    template <typename... Args>
-    struct _AutoStart {
-        static constexpr bool Valid = false;
-        static constexpr TaskFn Fn = nullptr;
-    };
-    
-    template <typename T, typename... Args>
-    struct _AutoStart<T, Args...> : _AutoStart<Args...> {};
-    
-    template <TaskFn T_Fn>
-    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>> {
-        static constexpr bool Valid = true;
-        static constexpr TaskFn Fn = T_Fn;
-    };
-    
-    template <TaskFn T_Fn, typename... Args>
-    struct _AutoStart<typename TaskOption::template AutoStart<T_Fn>, Args...> {
-        static constexpr bool Valid = true;
-        static constexpr TaskFn Fn = T_Fn;
-    };
-    
-    using AutoStart = _AutoStart<T_Opts...>;
+    TaskFn AutoStart = nullptr;
+    TaskFn WillStart = nullptr;
+    TaskFn DidStop = nullptr;
 };
 
 template <
@@ -49,7 +24,6 @@ template <
 class Scheduler {
 public:
     using Ticks = unsigned int;
-    using TaskFn = void(*)();
     
     // Start<task,fn>(): starts `task` running with `fn`
     template <typename T_Task, typename T_Fn>
@@ -59,8 +33,8 @@ public:
         task.cont = _TaskSwapInit;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
         
-        if constexpr (_Exists<T_Task, _WillStartExists>::value) {
-            T_Task::WillStart();
+        if constexpr (T_Task::Options.WillStart) {
+            T_Task::Options.WillStart();
         }
     }
     
@@ -70,8 +44,8 @@ public:
         constexpr _Task& task = _GetTask<T_Task>();
         task.cont = _TaskNop;
         
-        if constexpr (_Exists<T_Task, _DidStopExists>::value) {
-            T_Task::DidStop();
+        if constexpr (T_Task::Options.DidStop) {
+            T_Task::Options.DidStop();
         }
     }
     
@@ -231,21 +205,6 @@ private:
         _StackGuard& stackGuard;
     };
     
-    template <typename, typename T_Type, template<typename> typename T_Detector>
-    struct __Exists : std::false_type {};
-    
-    template <typename T_Type, template<typename> typename T_Detector>
-    struct __Exists<std::void_t<T_Detector<T_Type>>, T_Type, T_Detector> : std::true_type {};
-    
-    template <typename T_Type, template<typename> typename T_Member>
-    using _Exists = typename __Exists<void, T_Type, T_Member>::type;
-    
-    template <typename T_Type>
-    using _WillStartExists = decltype(T_Type::WillStart);
-    
-    template <typename T_Type>
-    using _DidStopExists = decltype(T_Type::DidStop);
-    
     // MARK: - Stack Guard
     
     static void _StackGuardInit(_StackGuard& guard) {
@@ -319,16 +278,16 @@ private:
         return std::is_same_v<T_1,T_2> ? 0 : 1 + _ElmIdx<T_1, T_s...>();
     }
     
-    template <typename T_Task, typename T_Option>
-    static constexpr bool _TaskHasOption() {
-        return T_Task::Options::template Exists<T_Option>();
-    }
-    
 #warning TODO: remove public after finished debugging
 public:
+    template <TaskFn T_Fn, TaskFn T_A, TaskFn T_B>
+    struct _FnConditional { static constexpr TaskFn Fn = T_A; };
+    template <TaskFn T_A, TaskFn T_B>
+    struct _FnConditional<nullptr, T_A, T_B> { static constexpr TaskFn Fn = T_B; };
+    
     static inline _Task _Tasks[] = {_Task{
-        .run = T_Tasks::Options::AutoStart::Fn,
-        .cont = T_Tasks::Options::AutoStart::Valid ? _TaskSwapInit : _TaskNop,
+        .run = T_Tasks::Options.AutoStart,
+        .cont = _FnConditional<T_Tasks::Options.AutoStart, _TaskSwapInit, _TaskNop>::Fn,
         .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
         .stackGuard = *(_StackGuard*)T_Tasks::Stack,
     }...};
