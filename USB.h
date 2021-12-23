@@ -74,6 +74,25 @@ namespace Endpoint {
     static constexpr uint8_t IndexMask                  = 0x0F;
 };
 
+// Endpoint Attributes (bmAttributes)
+namespace EndpointAttributes {
+    static constexpr uint8_t TransferControl                    = 0x00;
+    static constexpr uint8_t TransferIsochronous                = 0x01;
+    static constexpr uint8_t TransferBulk                       = 0x02;
+    static constexpr uint8_t TransferInterrupt                  = 0x03;
+    
+    namespace Isochronous {
+        static constexpr uint8_t SynchronizationNone            = 0x00;
+        static constexpr uint8_t SynchronizationAsynchronous    = 0x04;
+        static constexpr uint8_t SynchronizationAdaptive        = 0x08;
+        static constexpr uint8_t SynchronizationSynchronous     = 0x0C;
+        
+        static constexpr uint8_t UsageData                      = 0x00;
+        static constexpr uint8_t UsageFeedback                  = 0x10;
+        static constexpr uint8_t UsageImplicitFeedbackData      = 0x20;
+    };
+};
+
 namespace Language {
     static constexpr uint16_t English                   = 0x0409;
 };
