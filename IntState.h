@@ -7,7 +7,6 @@ public:
     // Functions provided by client
     static bool InterruptsEnabled();
     static void SetInterruptsEnabled(bool en);
-    static void WaitForInterrupt();
     
     IntState() {
         _prevEn = InterruptsEnabled();

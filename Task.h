@@ -2,7 +2,6 @@
 #include <type_traits>
 #include <cstdint>
 #include <cstdlib>
-#include "Toastbox/IntState.h"
 #include "Toastbox/TaskSwap.h"
 
 namespace Toastbox {
@@ -16,10 +15,12 @@ struct TaskOptions {
 };
 
 template <
-    uint32_t T_UsPerTick,       // T_UsPerTick: Microseconds per tick
-    auto* T_MainStack,          // T_MainStack: Main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
-    size_t T_StackGuardCount,   // T_StackGuardCount: Number of pointer-sized stack guard elements to use
-    typename... T_Tasks         // T_Tasks: List of tasks
+    uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
+    void T_SetInterruptsEnabled(bool),  // T_SetInterruptsEnabled: function to change interrupt state
+    void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
+    auto T_MainStack,                   // T_MainStack: main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
+    size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
+    typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
 public:
@@ -75,7 +76,7 @@ public:
                     // Disable interrupts
                     // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
                     // Regardless, when returning to the scheduler, interrupts need to be disabled.
-                    IntState::SetInterruptsEnabled(false);
+                    T_SetInterruptsEnabled(false);
                     
                     _CurrentTask = &task;
                     task.cont();
@@ -97,7 +98,7 @@ public:
             
             // No work to do
             // Go to sleep!
-            IntState::WaitForInterrupt();
+            T_Sleep();
         }
     }
     
@@ -224,7 +225,7 @@ private:
     static void _TaskStartWork() {
         _DidWork = true;
         // Enable interrupts
-        IntState::SetInterruptsEnabled(true);
+        T_SetInterruptsEnabled(true);
     }
     
     static void _TaskStart() {
