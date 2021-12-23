@@ -7,7 +7,7 @@
 // (2) tmp = $SP
 // (3) $SP = `sp`
 // (4) `sp` = tmp
-// if `initFn`:
+// if `initFn` != nullptr:
 //   (5) Jump to `initFn`
 // else
 //   (6) Pop callee-saved registers from stack

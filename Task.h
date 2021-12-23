@@ -16,10 +16,10 @@ struct TaskOptions {
 };
 
 template <
-    uint32_t T_UsPerTick,       // Microseconds per tick
-    auto T_MainStack,           // Main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
-    size_t T_StackGuardCount,   // Number of pointer-sized stack guard elements to use
-    typename... T_Tasks         // List of tasks
+    uint32_t T_UsPerTick,       // T_UsPerTick: Microseconds per tick
+    auto* T_MainStack,          // T_MainStack: Main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
+    size_t T_StackGuardCount,   // T_StackGuardCount: Number of pointer-sized stack guard elements to use
+    typename... T_Tasks         // T_Tasks: List of tasks
 >
 class Scheduler {
 public:
