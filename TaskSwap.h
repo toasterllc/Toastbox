@@ -1,7 +1,7 @@
 #pragma once
 
-// TaskSwap(): architecture-specific implementation that swaps the current
-// task with a different task.
+// TaskSwap(): architecture-specific macro that swaps the current task
+// with a different task. Steps:
 //
 // (1) Push callee-saved regs onto stack, including $PC if needed
 // (2) tmp = $SP
