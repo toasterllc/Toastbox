@@ -89,12 +89,12 @@ public:
                 }
             } while (_DidWork);
             
-            // Reset _Wake now that we're assured that every task has been able to observe
-            // _Wake=true while interrupts were disabled during the entire process.
+            // Reset _ISR.Wake now that we're assured that every task has been able to observe
+            // _ISR.Wake=true while interrupts were disabled during the entire process.
             // (If interrupts were enabled, it's because we entered a task, and therefore
             // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
             // were entered -> interrupts are still disabled.)
-            _Wake = false;
+            _ISR.Wake = false;
             
             // No work to do
             // Go to sleep!
@@ -158,21 +158,21 @@ public:
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
-        const Ticks wakeTime = _CurrentTime+ticks+1;
+        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
         do {
-            // Update _WakeTime
-            const Ticks wakeDelay = wakeTime-_CurrentTime;
-            const Ticks currentWakeDelay = _WakeTime-_CurrentTime;
-            if (!currentWakeDelay || wakeDelay < currentWakeDelay) {
-                _WakeTime = wakeTime;
+            // Update _ISR.WakeTime
+            const Ticks wakeDelay = wakeTime-_ISR.CurrentTime;
+            const Ticks currentWakeDelay = _ISR.WakeTime-_ISR.CurrentTime;
+            if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
+                _ISR.WakeTime = wakeTime;
             }
             
-            // Wait until we wake because _WakeTime expired (not necessarily
+            // Wait until we wake because _ISR.WakeTime expired (not necessarily
             // because of this task though)
             do _TaskSwap();
-            while (!_Wake);
+            while (!_ISR.Wake);
         
-        } while (_CurrentTime != wakeTime);
+        } while (_ISR.CurrentTime != wakeTime);
         
         _TaskStartWork();
     }
@@ -180,13 +180,13 @@ public:
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
-        // Don't increment time if there's an existing _Wake signal that hasn't been consumed.
+        // Don't increment time if there's an existing _ISR.Wake signal that hasn't been consumed.
         // This is necessary so that we don't miss any ticks, which could cause a task wakeup to be missed.
-        if (_Wake) return true;
+        if (_ISR.Wake) return true;
         
-        _CurrentTime++;
-        if (_CurrentTime == _WakeTime) {
-            _Wake = true;
+        _ISR.CurrentTime++;
+        if (_ISR.CurrentTime == _ISR.WakeTime) {
+            _ISR.Wake = true;
             return true;
         }
         
@@ -301,9 +301,11 @@ public:
     static inline bool _DidWork = false;
     static inline _Task* _CurrentTask = nullptr;
     
-    static inline Ticks _CurrentTime = 0;
-    static inline bool _Wake = false;
-    static inline Ticks _WakeTime = 0;
+    static volatile inline struct {
+        Ticks CurrentTime = 0;
+        bool Wake = false;
+        Ticks WakeTime = 0;
+    } _ISR;
 };
 
 } // namespace Toastbox
