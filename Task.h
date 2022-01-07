@@ -18,7 +18,7 @@ template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
     void T_SetInterruptsEnabled(bool),  // T_SetInterruptsEnabled: function to change interrupt state
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
-    void T_Error(uint16_t),             // T_Error: function to call when an unrecoverable error (such as stack overflow)
+    void T_Error(uint16_t),             // T_Error: function to call upon an unrecoverable error (eg stack overflow)
     auto T_MainStack,                   // T_MainStack: main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
     typename... T_Tasks                 // T_Tasks: list of tasks
@@ -160,6 +160,10 @@ public:
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
+        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+        T_SetInterruptsEnabled(false);
+        
         const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
         do {
             // Update _ISR.WakeTime
@@ -304,7 +308,8 @@ public:
     static volatile inline struct {
         Ticks CurrentTime = 0;
         bool Wake = false;
-        Ticks WakeTime = 0;
+        Ticks WakeTime = ~((Ticks)0);   // `=~0` is necessary so that _ISR is initialized to a coherent state such
+                                        // that a Sleep() invocation at startup (at CurrentTime==0) works properly
     } _ISR;
 #undef Assert
 };
