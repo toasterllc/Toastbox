@@ -308,8 +308,7 @@ public:
     static volatile inline struct {
         Ticks CurrentTime = 0;
         bool Wake = false;
-        Ticks WakeTime = ~((Ticks)0);   // `=~0` is necessary so that _ISR is initialized to a coherent state such
-                                        // that a Sleep() invocation at startup (at CurrentTime==0) works properly
+        Ticks WakeTime = 0;
     } _ISR;
 #undef Assert
 };
