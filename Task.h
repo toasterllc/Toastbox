@@ -18,11 +18,13 @@ template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
     void T_SetInterruptsEnabled(bool),  // T_SetInterruptsEnabled: function to change interrupt state
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
+    void T_Error(uint16_t),             // T_Error: function to call when an unrecoverable error (such as stack overflow)
     auto T_MainStack,                   // T_MainStack: main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
+#define Assert(x) if (!(x)) T_Error(__LINE__)
 public:
     using Ticks = unsigned int;
     
@@ -216,9 +218,7 @@ private:
     
     static void _StackGuardCheck(const _StackGuard& guard) {
         for (const uintptr_t& x : guard) {
-            if (x != _StackGuardMagicNumber) {
-                abort();
-            }
+            Assert(x == _StackGuardMagicNumber);
         }
     }
     
@@ -306,6 +306,7 @@ public:
         bool Wake = false;
         Ticks WakeTime = 0;
     } _ISR;
+#undef Assert
 };
 
 } // namespace Toastbox
