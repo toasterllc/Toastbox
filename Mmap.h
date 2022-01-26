@@ -100,7 +100,15 @@ public:
     template <typename T=uint8_t>
     size_t len() const { return _state.len/sizeof(T); }
     
+    size_t alignedLen() const { return _CeilToPageSize(_state.len); }
+    
 private:
+    
+    static size_t _CeilToPageSize(size_t x) {
+        static const size_t PageSize = getpagesize();
+        return ((x+PageSize-1)/PageSize)*PageSize;
+    }
+    
     void _init(const FileDescriptor& fd, size_t len, int flags) {
         if (len == SIZE_MAX) {
             struct stat st;
@@ -112,7 +120,7 @@ private:
             _state.len = len;
         }
         
-        void* data = mmap(nullptr, _state.len, PROT_READ|PROT_WRITE, flags, fd, 0);
+        void* data = mmap(nullptr, alignedLen(), PROT_READ|PROT_WRITE, flags, fd, 0);
         if (data == MAP_FAILED) throw Toastbox::RuntimeError("mmap failed: %s", strerror(errno));
         _state.data = (uint8_t*)data;
     }
