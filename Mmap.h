@@ -15,9 +15,9 @@ class Mmap {
 public:
     Mmap() {}
     
-    Mmap(FileDescriptor&& fd, int flags=MAP_PRIVATE) {
+    Mmap(const FileDescriptor& fd, size_t len=SIZE_MAX, int flags=MAP_PRIVATE) {
         try {
-            _init(std::move(fd), flags);
+            _init(std::move(fd), len, flags);
         
         } catch (...) {
             _reset();
@@ -25,11 +25,11 @@ public:
         }
     }
     
-    Mmap(const std::filesystem::path& path, int flags=MAP_PRIVATE) {
+    Mmap(const std::filesystem::path& path, size_t len=SIZE_MAX, int flags=MAP_PRIVATE) {
         try {
             int fd = open(path.c_str(), O_RDWR);
             if (fd < 0) throw Toastbox::RuntimeError("open failed: %s", strerror(errno));
-            _init(fd, flags);
+            _init(fd, len, flags);
         
         } catch (...) {
             _reset();
@@ -53,8 +53,8 @@ public:
         _reset();
     }
     
-    void sync() {
-        if (!_state.fd) throw Toastbox::RuntimeError("invalid state");
+    void sync() const {
+        if (!_state.data) throw Toastbox::RuntimeError("invalid state");
         int ir = msync(_state.data, _state.len, MS_SYNC);
         if (ir) throw Toastbox::RuntimeError("msync failed: %s", strerror(errno));
     }
@@ -78,15 +78,20 @@ public:
 //    }
     
     template <typename T=uint8_t>
+    T* data(size_t off=0) {
+        return const_cast<T*>(((const Mmap*)this)->data<T>());
+    }
+    
+    template <typename T=uint8_t>
     const T* data(size_t off=0) const {
         if (off>_state.len || (_state.len-off)<sizeof(T)) {
-            const uintmax_t validStart = 0;
-            const uintmax_t validEnd = _state.len-1;
-            const uintmax_t accessStart = off;
-            const uintmax_t accessEnd = off+sizeof(T)-1;
+            const uintmax_t validFirst = 0;
+            const uintmax_t validLast = _state.len-1;
+            const uintmax_t accessFirst = off;
+            const uintmax_t accessLast = off+sizeof(T)-1;
             throw Toastbox::RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
-                validStart, validEnd,
-                accessStart, accessEnd
+                validFirst, validLast,
+                accessFirst, accessLast
             );
         }
         return (const T*)(_state.data+off);
@@ -96,15 +101,18 @@ public:
     size_t len() const { return _state.len/sizeof(T); }
     
 private:
-    void _init(FileDescriptor&& fd, int flags) {
-        _state.fd = std::move(fd);
+    void _init(const FileDescriptor& fd, size_t len, int flags) {
+        if (len == SIZE_MAX) {
+            struct stat st;
+            int ir = fstat(fd, &st);
+            if (ir) throw Toastbox::RuntimeError("fstat failed: %s", strerror(errno));
+            _state.len = st.st_size;
         
-        struct stat st;
-        int ir = fstat(_state.fd, &st);
-        if (ir) throw Toastbox::RuntimeError("fstat failed: %s", strerror(errno));
-        _state.len = st.st_size;
+        } else {
+            _state.len = len;
+        }
         
-        void* data = mmap(nullptr, st.st_size, PROT_READ|PROT_WRITE, flags, _state.fd, 0);
+        void* data = mmap(nullptr, _state.len, PROT_READ|PROT_WRITE, flags, fd, 0);
         if (data == MAP_FAILED) throw Toastbox::RuntimeError("mmap failed: %s", strerror(errno));
         _state.data = (uint8_t*)data;
     }
@@ -118,7 +126,6 @@ private:
     }
     
     struct {
-        FileDescriptor fd;
         uint8_t* data = nullptr;
         size_t len = 0;
     } _state = {};
