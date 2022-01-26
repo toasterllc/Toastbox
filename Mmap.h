@@ -79,7 +79,7 @@ public:
     
     template <typename T=uint8_t>
     T* data(size_t off=0) {
-        return const_cast<T*>(((const Mmap*)this)->data<T>());
+        return const_cast<T*>(((const Mmap*)this)->data<T>(off));
     }
     
     template <typename T=uint8_t>
