@@ -6,11 +6,11 @@
 namespace Toastbox {
 
 template <typename T>
-static T IntForStr(const std::string& s) {
+static T IntForStr(const std::string_view& s) {
     // Unsigned types
     if constexpr (!std::numeric_limits<T>::is_signed) {
         errno = 0;
-        const uintmax_t i = strtoumax(s.c_str(), nullptr, 0);
+        const uintmax_t i = strtoumax(s.data(), nullptr, 0);
         if (errno) throw std::system_error(errno, std::generic_category());
         
         if (i > std::numeric_limits<T>::max()) {
@@ -22,7 +22,7 @@ static T IntForStr(const std::string& s) {
     // Signed types
     } else {
         errno = 0;
-        const intmax_t i = strtoimax(s.c_str(), nullptr, 0);
+        const intmax_t i = strtoimax(s.data(), nullptr, 0);
         if (errno) throw std::system_error(errno, std::generic_category());
         
         if (i>std::numeric_limits<T>::max() || i<std::numeric_limits<T>::min()) {
@@ -34,7 +34,7 @@ static T IntForStr(const std::string& s) {
 }
 
 template <typename T>
-static void IntForStr(T& i, const std::string& s) {
+static void IntForStr(T& i, const std::string_view& s) {
     i = IntForStr<T>(s);
 }
 
