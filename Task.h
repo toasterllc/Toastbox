@@ -101,6 +101,9 @@ public:
             // No work to do
             // Go to sleep!
             T_Sleep();
+            
+            // Allow interrupts to fire
+            T_SetInterruptsEnabled(true);
         }
     }
     
@@ -151,11 +154,25 @@ public:
         Sleep(_TicksForUs(T_Us));
     }
     
+    // DelayUs(us) delay for `us` microseconds
+    // Templated to ensure compile-time conversion from us->ticks
+    template <uint16_t T_Us>
+    static void DelayUs() {
+        Delay(_TicksForUs(T_Us));
+    }
+    
     // SleepMs(ms) sleep for `ms` microseconds
     // Templated to ensure compile-time conversion from ms->ticks
     template <uint16_t T_Ms>
     static void SleepMs() {
         Sleep(_TicksForUs(1000*(uint32_t)T_Ms));
+    }
+    
+    // DelayMs(ms) delay for `ms` microseconds
+    // Templated to ensure compile-time conversion from ms->ticks
+    template <uint16_t T_Ms>
+    static void DelayMs() {
+        Delay(_TicksForUs(1000*(uint32_t)T_Ms));
     }
     
     // Sleep(ticks): sleep current task for `ticks`
@@ -183,12 +200,25 @@ public:
         _TaskStartWork();
     }
     
+    // Delay(ticks): delay current task for `ticks`, without allowing other tasks to run
+    static void Delay(Ticks ticks) {
+        _ISR.Delay = true;
+        for (Ticks i=0;; i++) {
+            T_Sleep();
+            // Check break condition here so that:
+            //   1. we sleep ticks+1 times, and
+            //   2. ticks == ~0 works properly
+            if (i == ticks) break;
+        }
+        _ISR.Delay = false;
+    }
+    
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
         // Don't increment time if there's an existing _ISR.Wake signal that hasn't been consumed.
         // This is necessary so that we don't miss any ticks, which could cause a task wakeup to be missed.
-        if (_ISR.Wake) return true;
+        if (_ISR.Wake || _ISR.Delay) return true;
         
         _ISR.CurrentTime++;
         if (_ISR.CurrentTime == _ISR.WakeTime) {
@@ -307,8 +337,9 @@ public:
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
-        bool Wake = false;
         Ticks WakeTime = 0;
+        bool Wake = false;
+        std::atomic<bool> Delay = false; // Atomic because we assign without disabling interrupts
     } _ISR;
 #undef Assert
 };
