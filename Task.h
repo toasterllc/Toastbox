@@ -2,6 +2,7 @@
 #include <type_traits>
 #include <cstdint>
 #include <cstdlib>
+#include <atomic>
 #include "Toastbox/TaskSwap.h"
 
 namespace Toastbox {
