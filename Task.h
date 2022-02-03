@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <atomic>
+#include <optional>
 #include "Toastbox/TaskSwap.h"
 
 namespace Toastbox {
@@ -134,6 +135,108 @@ public:
         }
     }
     
+    template <typename T_Fn>
+    static auto Wait(Ticks ticks, T_Fn&& fn) {
+        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+        T_SetInterruptsEnabled(false);
+        
+        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
+        do {
+            const auto r = fn();
+            if (r) {
+                _TaskStartWork();
+                return std::make_optional(r);
+            }
+            
+            // Update _ISR.WakeTime
+            _ProposeWakeTime(wakeTime);
+            
+            // Next task
+            _TaskSwap();
+        } while (_ISR.CurrentTime != wakeTime);
+        
+        // Timeout
+        _TaskStartWork();
+        return std::optional<std::invoke_result_t<T_Fn>>{};
+    }
+    
+//    template <typename T_Fn>
+//    static auto Wait(Ticks ticks, T_Fn&& fn) {
+//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+//        T_SetInterruptsEnabled(false);
+//        
+//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
+//        for (;;) {
+//            const auto r = fn();
+//            if (r) {
+//                _TaskStartWork();
+//                return std::make_optional(r);
+//            }
+//            
+//            if (_ISR.CurrentTime == wakeTime) {
+//                _TaskStartWork();
+//                return std::nullopt;
+//            }
+//            
+//            _TaskSwap();
+//        }
+//    }
+    
+//    template <typename T_Fn>
+//    static auto Wait(Ticks ticks, T_Fn&& fn) {
+//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+//        T_SetInterruptsEnabled(false);
+//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
+//        std::optional<std::invoke_result_t<T_Fn>> r;
+//        do {
+//            // Ask function if we're done
+//            const auto fnr = fn();
+//            if (fnr) {
+//                r = fnr;
+//                break;
+//            }
+//        } while (_ISR.CurrentTime != wakeTime);
+//        
+//        _TaskStartWork();
+//        return r;
+//    }
+    
+    
+//    template <typename T_Fn>
+//    static auto Wait(Ticks ticks, T_Fn&& fn) {
+//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+//        T_SetInterruptsEnabled(false);
+//        
+//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
+//        do {
+//            const auto r = fn();
+//            if (r) {
+//                _TaskStartWork();
+//                return std::make_optional(r);
+//            }
+//            
+//            // Update _ISR.WakeTime
+//            const Ticks wakeDelay = wakeTime-_ISR.CurrentTime;
+//            const Ticks currentWakeDelay = _ISR.WakeTime-_ISR.CurrentTime;
+//            if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
+//                _ISR.WakeTime = wakeTime;
+//            }
+//            
+//            // Wait until we wake because _ISR.WakeTime expired (not necessarily
+//            // because of this task though)
+//            do _TaskSwap();
+//            while (!_ISR.Wake);
+//        
+//        } while (_ISR.CurrentTime != wakeTime);
+//        
+//        _TaskStartWork();
+//        return std::nullopt;
+//    }
+    
     // Wait<tasks>(): sleep current task until `tasks` all stop running
     template <typename... T_Tsks>
     static void Wait() {
@@ -152,11 +255,7 @@ public:
         const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
         do {
             // Update _ISR.WakeTime
-            const Ticks wakeDelay = wakeTime-_ISR.CurrentTime;
-            const Ticks currentWakeDelay = _ISR.WakeTime-_ISR.CurrentTime;
-            if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
-                _ISR.WakeTime = wakeTime;
-            }
+            _ProposeWakeTime(wakeTime);
             
             // Wait until we wake because _ISR.WakeTime expired (not necessarily
             // because of this task though)
@@ -267,6 +366,14 @@ private:
         // ceils by adding one tick (to prevent truncated sleeps), so if this
         // function ceiled too, we'd always sleep one more tick than needed.
         return us / T_UsPerTick;
+    }
+    
+    static void _ProposeWakeTime(Ticks wakeTime) {
+        const Ticks wakeDelay = wakeTime-_ISR.CurrentTime;
+        const Ticks currentWakeDelay = _ISR.WakeTime-_ISR.CurrentTime;
+        if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
+            _ISR.WakeTime = wakeTime;
+        }
     }
     
     // _GetTask(): returns the _Task& for the given T_Task
