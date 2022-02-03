@@ -135,6 +135,32 @@ public:
         }
     }
     
+//    template <typename T_Fn>
+//    static auto Wait(Ticks ticks, T_Fn&& fn) {
+//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+//        T_SetInterruptsEnabled(false);
+//        
+//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
+//        std::optional<std::invoke_result_t<T_Fn>> r;
+//        do {
+//            const auto fnr = fn();
+//            if (fnr) {
+//                r = fnr;
+//                break;
+//            }
+//            
+//            // Update _ISR.WakeTime
+//            _ProposeWakeTime(wakeTime);
+//            
+//            // Next task
+//            _TaskSwap();
+//        } while (_ISR.CurrentTime != wakeTime);
+//        
+//        _TaskStartWork();
+//        return r;
+//    }
+    
     template <typename T_Fn>
     static auto Wait(Ticks ticks, T_Fn&& fn) {
         // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
