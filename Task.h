@@ -134,47 +134,23 @@ public:
         }
     }
     
-    // Wait<task>(): sleep current task until `task` stops running
-    template <typename T_Task>
+    // Wait<tasks>(): sleep current task until `tasks` all stop running
+    template <typename... T_Tsks>
     static void Wait() {
-        Wait([] { return !Running<T_Task>(); });
+        Wait([] { return (!Running<T_Tsks>() && ...); });
     }
     
-//    static void SleepUs(uint16_t us) {
-//        Sleep(_TicksForUs(us));
-//    }
-//    
-//    static void SleepMs(uint16_t ms) {
-//        Sleep(_TicksForUs(1000*(uint32_t)ms));
-//    }
-    
-    // SleepUs(us) sleep for `us` microseconds
-    // Templated to ensure compile-time conversion from us->ticks
     template <uint16_t T_Us>
-    static void SleepUs() {
-        Sleep(_TicksForUs(T_Us));
-    }
+    static Ticks Us() { return _TicksForUs(T_Us); }
     
-    // DelayUs(us) delay for `us` microseconds
-    // Templated to ensure compile-time conversion from us->ticks
-    template <uint16_t T_Us>
-    static void DelayUs() {
-        Delay(_TicksForUs(T_Us));
-    }
-    
-    // SleepMs(ms) sleep for `ms` microseconds
-    // Templated to ensure compile-time conversion from ms->ticks
     template <uint16_t T_Ms>
-    static void SleepMs() {
-        Sleep(_TicksForUs(1000*(uint32_t)T_Ms));
-    }
+    static Ticks Ms() { return _TicksForUs(1000*(uint32_t)T_Ms); }
     
-    // DelayMs(ms) delay for `ms` microseconds
-    // Templated to ensure compile-time conversion from ms->ticks
-    template <uint16_t T_Ms>
-    static void DelayMs() {
-        Delay(_TicksForUs(1000*(uint32_t)T_Ms));
-    }
+//    struct Ms {
+//        Ms(uint16_t x) : _x(x) {}
+//        operator Ticks() const { ; }
+//        uint16_t _x = 0;
+//    };
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
