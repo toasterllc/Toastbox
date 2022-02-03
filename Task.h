@@ -135,32 +135,6 @@ public:
         }
     }
     
-//    template <typename T_Fn>
-//    static auto Wait(Ticks ticks, T_Fn&& fn) {
-//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
-//        T_SetInterruptsEnabled(false);
-//        
-//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
-//        std::optional<std::invoke_result_t<T_Fn>> r;
-//        do {
-//            const auto fnr = fn();
-//            if (fnr) {
-//                r = fnr;
-//                break;
-//            }
-//            
-//            // Update _ISR.WakeTime
-//            _ProposeWakeTime(wakeTime);
-//            
-//            // Next task
-//            _TaskSwap();
-//        } while (_ISR.CurrentTime != wakeTime);
-//        
-//        _TaskStartWork();
-//        return r;
-//    }
-    
     template <typename T_Fn>
     static auto Wait(Ticks ticks, T_Fn&& fn) {
         // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
@@ -186,82 +160,6 @@ public:
         _TaskStartWork();
         return std::optional<std::invoke_result_t<T_Fn>>{};
     }
-    
-//    template <typename T_Fn>
-//    static auto Wait(Ticks ticks, T_Fn&& fn) {
-//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
-//        T_SetInterruptsEnabled(false);
-//        
-//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
-//        for (;;) {
-//            const auto r = fn();
-//            if (r) {
-//                _TaskStartWork();
-//                return std::make_optional(r);
-//            }
-//            
-//            if (_ISR.CurrentTime == wakeTime) {
-//                _TaskStartWork();
-//                return std::nullopt;
-//            }
-//            
-//            _TaskSwap();
-//        }
-//    }
-    
-//    template <typename T_Fn>
-//    static auto Wait(Ticks ticks, T_Fn&& fn) {
-//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
-//        T_SetInterruptsEnabled(false);
-//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
-//        std::optional<std::invoke_result_t<T_Fn>> r;
-//        do {
-//            // Ask function if we're done
-//            const auto fnr = fn();
-//            if (fnr) {
-//                r = fnr;
-//                break;
-//            }
-//        } while (_ISR.CurrentTime != wakeTime);
-//        
-//        _TaskStartWork();
-//        return r;
-//    }
-    
-    
-//    template <typename T_Fn>
-//    static auto Wait(Ticks ticks, T_Fn&& fn) {
-//        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-//        // Note that _TaskSwap() (called below) returns with ints disabled as well.
-//        T_SetInterruptsEnabled(false);
-//        
-//        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
-//        do {
-//            const auto r = fn();
-//            if (r) {
-//                _TaskStartWork();
-//                return std::make_optional(r);
-//            }
-//            
-//            // Update _ISR.WakeTime
-//            const Ticks wakeDelay = wakeTime-_ISR.CurrentTime;
-//            const Ticks currentWakeDelay = _ISR.WakeTime-_ISR.CurrentTime;
-//            if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
-//                _ISR.WakeTime = wakeTime;
-//            }
-//            
-//            // Wait until we wake because _ISR.WakeTime expired (not necessarily
-//            // because of this task though)
-//            do _TaskSwap();
-//            while (!_ISR.Wake);
-//        
-//        } while (_ISR.CurrentTime != wakeTime);
-//        
-//        _TaskStartWork();
-//        return std::nullopt;
-//    }
     
     // Wait<tasks>(): sleep current task until `tasks` all stop running
     template <typename... T_Tsks>
