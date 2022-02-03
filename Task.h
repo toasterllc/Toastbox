@@ -140,17 +140,8 @@ public:
         Wait([] { return (!Running<T_Tsks>() && ...); });
     }
     
-    template <uint16_t T_Us>
-    static Ticks Us() { return _TicksForUs(T_Us); }
-    
-    template <uint16_t T_Ms>
-    static Ticks Ms() { return _TicksForUs(1000*(uint32_t)T_Ms); }
-    
-//    struct Ms {
-//        Ms(uint16_t x) : _x(x) {}
-//        operator Ticks() const { ; }
-//        uint16_t _x = 0;
-//    };
+    static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
+    static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
