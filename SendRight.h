@@ -5,7 +5,7 @@
 
 namespace Toastbox {
 
-void _SendRightRetain(mach_port_t x) {
+inline void _SendRightRetain(mach_port_t x) {
     if (MACH_PORT_VALID(x)) {
         kern_return_t kr = mach_port_mod_refs(mach_task_self(), x, MACH_PORT_RIGHT_SEND, 1);
         // KERN_INVALID_RIGHT is returned when the send right is actually a dead name,
@@ -18,7 +18,7 @@ void _SendRightRetain(mach_port_t x) {
     }
 }
 
-void _SendRightRelease(mach_port_t x) {
+inline void _SendRightRelease(mach_port_t x) {
     if (MACH_PORT_VALID(x)) {
         kern_return_t kr = mach_port_deallocate(mach_task_self(), x);
         assert(kr == KERN_SUCCESS);

@@ -15,6 +15,7 @@ public:
     RefCounted(NoRetainType, const T& t) : _t(t) {}
     RefCounted(NoRetainType, T&& t) : _t(std::move(t)) {}
     // Constructor: with retain
+    RefCounted(RetainType, const T& t) : _t(t) { RetainFn(*_t); }
     RefCounted(RetainType, T&& t) : _t(std::move(t)) { RetainFn(*_t); }
     // Copy constructor: use copy assignment operator
     RefCounted(const RefCounted& x) { *this = x; }
