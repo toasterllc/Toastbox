@@ -377,7 +377,7 @@ public:
         _CheckErr(ior, "DeviceRequest failed");
     }
     
-    SendRight& service() { return _service; }
+    const SendRight& service() const { return _service; }
     
 private:
     struct _EndpointInfo {
