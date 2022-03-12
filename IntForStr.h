@@ -14,7 +14,7 @@ static T IntForStr(const std::string_view& s) {
         if (errno) throw std::system_error(errno, std::generic_category());
         
         if (i > std::numeric_limits<T>::max()) {
-            throw Toastbox::RuntimeError("integer out of range: %ju", (uintmax_t)i);
+            throw RuntimeError("integer out of range: %ju", (uintmax_t)i);
         }
         
         return (T)i;
@@ -26,7 +26,7 @@ static T IntForStr(const std::string_view& s) {
         if (errno) throw std::system_error(errno, std::generic_category());
         
         if (i>std::numeric_limits<T>::max() || i<std::numeric_limits<T>::min()) {
-            throw Toastbox::RuntimeError("integer out of range: %jd", (intmax_t)i);
+            throw RuntimeError("integer out of range: %jd", (intmax_t)i);
         }
         
         return (T)i;

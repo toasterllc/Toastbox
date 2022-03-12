@@ -11,6 +11,8 @@
 #include "RuntimeError.h"
 #include "FileDescriptor.h"
 
+namespace Toastbox {
+
 class Mmap {
 public:
     Mmap() {}
@@ -28,7 +30,7 @@ public:
     Mmap(const std::filesystem::path& path, size_t len=SIZE_MAX, int flags=MAP_PRIVATE) {
         try {
             int fd = open(path.c_str(), O_RDWR);
-            if (fd < 0) throw Toastbox::RuntimeError("open failed: %s", strerror(errno));
+            if (fd < 0) throw RuntimeError("open failed: %s", strerror(errno));
             _init(fd, len, flags);
         
         } catch (...) {
@@ -54,9 +56,9 @@ public:
     }
     
     void sync() const {
-        if (!_state.data) throw Toastbox::RuntimeError("invalid state");
+        if (!_state.data) throw RuntimeError("invalid state");
         int ir = msync(_state.data, _state.len, MS_SYNC);
-        if (ir) throw Toastbox::RuntimeError("msync failed: %s", strerror(errno));
+        if (ir) throw RuntimeError("msync failed: %s", strerror(errno));
     }
     
 //    template <typename T=uint8_t>
@@ -69,7 +71,7 @@ public:
 //            const uintmax_t validEnd = _state.len-1;
 //            const uintmax_t accessStart = off;
 //            const uintmax_t accessEnd = off+sizeof(T)-1;
-//            throw Toastbox::RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
+//            throw RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
 //                validStart, validEnd,
 //                accessStart, accessEnd
 //            );
@@ -89,7 +91,7 @@ public:
             const uintmax_t validLast = _state.len-1;
             const uintmax_t accessFirst = off;
             const uintmax_t accessLast = off+sizeof(T)-1;
-            throw Toastbox::RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
+            throw RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
                 validFirst, validLast,
                 accessFirst, accessLast
             );
@@ -113,7 +115,7 @@ private:
         if (len == SIZE_MAX) {
             struct stat st;
             int ir = fstat(fd, &st);
-            if (ir) throw Toastbox::RuntimeError("fstat failed: %s", strerror(errno));
+            if (ir) throw RuntimeError("fstat failed: %s", strerror(errno));
             _state.len = st.st_size;
         
         } else {
@@ -121,7 +123,7 @@ private:
         }
         
         void* data = mmap(nullptr, alignedLen(), PROT_READ|PROT_WRITE, flags, fd, 0);
-        if (data == MAP_FAILED) throw Toastbox::RuntimeError("mmap failed: %s", strerror(errno));
+        if (data == MAP_FAILED) throw RuntimeError("mmap failed: %s", strerror(errno));
         _state.data = (uint8_t*)data;
     }
     
@@ -138,3 +140,5 @@ private:
         size_t len = 0;
     } _state = {};
 };
+
+} // namespace Toastbox
