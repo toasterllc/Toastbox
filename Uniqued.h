@@ -24,16 +24,17 @@ public:
     
     ~Uniqued() { if (_t) FreeFn(*_t); }
     
-    operator T() const {
+    operator T&() {
         assert(_t);
         return *_t;
     }
     
-    operator T() {
+    operator const T&() const {
         assert(_t);
         return *_t;
     }
     
+//    operator bool() const { return _t.has_value(); }
     bool hasValue() const { return _t.has_value(); }
     
     void reset() {
