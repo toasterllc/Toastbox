@@ -7,8 +7,10 @@ namespace Toastbox {
 // Read()/Write(): simple wrappers around the read()/write() syscalls
 // that handle EINTR, and throw an exception upon error
 
-struct ReadWriteTimeout : std::runtime_error {
-    ReadWriteTimeout() : std::runtime_error("timeout") {}
+struct ReadWriteTimeout : std::exception {
+    const char* what() const noexcept override {
+        return "read/write timeout";
+    }
 };
 
 template <bool T_Write>
