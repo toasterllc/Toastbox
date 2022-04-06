@@ -12,15 +12,10 @@ public:
     // Copy constructor: illegal
     Uniqued(const Uniqued& x) = delete;
     Uniqued& operator=(const Uniqued& x) = delete;
-    // Move constructor: use move assignment operator
-    Uniqued(Uniqued&& x) { *this = std::move(x); }
+    // Move constructor
+    Uniqued(Uniqued&& x) { swap(x); }
     // Move assignment operator
-    Uniqued& operator=(Uniqued&& x) {
-        if (_t) FreeFn(*_t);
-        _t = std::move(x._t);
-        x._t = std::nullopt;
-        return *this;
-    }
+    Uniqued& operator=(Uniqued&& x) { swap(x); return *this; }
     
     ~Uniqued() { if (_t) FreeFn(*_t); }
     
@@ -42,6 +37,10 @@ public:
             FreeFn(*_t);
             _t = std::nullopt;
         }
+    }
+    
+    void swap(Uniqued& x) {
+        std::swap(_t, x._t);
     }
     
 private:
