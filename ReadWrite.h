@@ -29,7 +29,7 @@ inline bool _Select(int fd, const std::chrono::steady_clock::time_point& deadlin
         
         fd_set fds;
         FD_ZERO(&fds);
-        FD_SET(STDIN_FILENO, &fds);
+        FD_SET(fd, &fds);
         if constexpr (!T_Write) ir = select(fd+1, &fds, nullptr, nullptr, &timeout);
         else                    ir = select(fd+1, nullptr, &fds, nullptr, &timeout);
     } while (ir==-1 && errno==EINTR);
