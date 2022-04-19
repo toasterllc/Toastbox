@@ -1,6 +1,10 @@
 #pragma once
 #include <fstream>
 
+#ifdef __GLIBCXX__
+#include <ext/stdio_filebuf.h>
+#endif
+
 namespace Toastbox {
 
 // FDStream allows an istream/ostream/iostream to be created from a file descriptor.
