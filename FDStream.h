@@ -1,5 +1,7 @@
 #pragma once
 #include <fstream>
+#include <memory>
+#include <cassert>
 
 #ifdef __GLIBCXX__
 #include <ext/stdio_filebuf.h>
