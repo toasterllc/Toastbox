@@ -4,14 +4,14 @@
 namespace Toastbox {
 
 inline std::string _RuntimeErrorFmtMsg(const char* str) {
-    char msg[256];
+    char msg[512];
     snprintf(msg, sizeof(msg), "%s", str);
     return msg;
 }
 
 template <typename ...Args>
 inline std::string _RuntimeErrorFmtMsg(const char* fmt, Args&&... args) {
-    char msg[256];
+    char msg[512];
     snprintf(msg, sizeof(msg), fmt, std::forward<Args>(args)...);
     return msg;
 }
