@@ -2,6 +2,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <sstream>
 
 namespace Toastbox::String {
 
@@ -28,6 +29,17 @@ inline std::vector<std::string> Split(std::string_view str, std::string_view del
         pos = posNew+delim.size();
     }
     return tokens;
+}
+
+inline std::string Join(const std::vector<std::string>& strs, std::string_view delim) {
+    std::stringstream ss;
+    bool first = true;
+    for (const std::string& str : strs) {
+        if (!first) ss << delim;
+        ss << str;
+        first = false;
+    }
+    return ss.str();
 }
 
 } // namespace Toastbox
