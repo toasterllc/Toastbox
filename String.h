@@ -42,4 +42,11 @@ inline std::string Join(const std::vector<std::string>& strs, std::string_view d
     return ss.str();
 }
 
+inline std::string Trim(std::string_view str, const char* set="\t\n ") {
+    std::string x(str);
+    x.erase(x.find_last_not_of(set)+1);
+    x.erase(0, x.find_first_not_of(set));
+    return x;
+}
+
 } // namespace Toastbox
