@@ -3,19 +3,21 @@
 namespace Toastbox {
 
 template <typename T>
-T* Cast(id obj) {
-    assert([obj isKindOfClass:[T class]]);
+T Cast(id obj) {
+    using T_Class = typename std::remove_pointer<T>::type;
+    assert([obj isKindOfClass:[T_Class class]]);
     return obj;
 }
 
 template <typename T>
-T* CastOrNull(id obj) {
-    if ([obj isKindOfClass:[T class]]) return obj;
+T CastOrNull(id obj) {
+    using T_Class = typename std::remove_pointer<T>::type;
+    if ([obj isKindOfClass:[T_Class class]]) return obj;
     return nil;
 }
 
 template <typename T_Dst, typename T_Src>
-T_Dst Cast(T_Src src) {
+T_Dst Cast(std::shared_ptr<T_Src> src) {
     if (auto x = std::dynamic_pointer_cast<typename T_Dst::element_type>(src)) {
         return x;
     }
@@ -23,7 +25,7 @@ T_Dst Cast(T_Src src) {
 }
 
 template <typename T_Dst, typename T_Src>
-T_Dst CastOrNull(T_Src src) {
+T_Dst CastOrNull(std::shared_ptr<T_Src> src) {
     if (auto x = std::dynamic_pointer_cast<typename T_Dst::element_type>(src)) {
         return x;
     }
