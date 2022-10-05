@@ -9,7 +9,7 @@ T* Cast(id obj) {
 }
 
 template <typename T>
-T* CastOrNil(id obj) {
+T* CastOrNull(id obj) {
     if ([obj isKindOfClass:[T class]]) return obj;
     return nil;
 }
@@ -23,7 +23,7 @@ T_Dst Cast(T_Src src) {
 }
 
 template <typename T_Dst, typename T_Src>
-T_Dst CastOrNil(T_Src src) {
+T_Dst CastOrNull(T_Src src) {
     if (auto x = std::dynamic_pointer_cast<typename T_Dst::element_type>(src)) {
         return x;
     }
