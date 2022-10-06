@@ -1,4 +1,5 @@
 #pragma once
+#import <Cocoa/Cocoa.h>
 
 namespace Toastbox {
 
