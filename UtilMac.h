@@ -31,7 +31,15 @@ inline void TrackMouse(NSWindow* win, NSEvent* ev, Fn fn) {
             break;
         }
         
-        ev = [win nextEventMatchingMask:(NSEventMaskLeftMouseDown|NSEventMaskLeftMouseDragged|NSEventMaskLeftMouseUp)];
+        ev = [win nextEventMatchingMask:
+            NSEventMaskLeftMouseDown    |
+            NSEventMaskLeftMouseDragged |
+            NSEventMaskLeftMouseUp      |
+            // NSEventMaskFlagsChanged: allows shift key press/depress to be detected
+            // while dragging mouse (eg so selections can change dynamically
+            // depending on shift key state)
+            NSEventMaskFlagsChanged
+        ];
     }
 }
 
