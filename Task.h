@@ -28,7 +28,8 @@ template <
 class Scheduler {
 #define Assert(x) if (!(x)) T_Error(__LINE__)
 public:
-    using Ticks = unsigned int;
+    using Ticks     = unsigned int;
+    using Deadline  = Ticks;
     
     // Start<task,fn>(): starts `task` running with `fn`
     template <typename T_Task, typename T_Fn>
@@ -138,27 +139,51 @@ public:
     template <typename T_Fn>
     static auto Wait(Ticks ticks, T_Fn&& fn) {
         // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-        // Note that _TaskSwap() (called below) returns with ints disabled as well.
+        T_SetInterruptsEnabled(false);
+        const Deadline deadline = _ISR.CurrentTime+ticks+1;
+        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
+    }
+    
+    // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
+    //
+    // For a deadline to be considered in the past, it must be in the range:
+    //   [CurrentTime - TicksMax/2, CurrentTime]
+    // For a deadline to be considered in the future, it must be in the range:
+    //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
+    //
+    // where TicksMax is the maximum value that the `Ticks` type can hold.
+    //
+    // See relevent comment in function body.
+    template <typename T_Fn>
+    static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
+        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
         T_SetInterruptsEnabled(false);
         
-        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
-        do {
-            const auto r = fn();
-            if (r) {
-                _TaskStartWork();
-                return std::make_optional(r);
-            }
-            
-            // Update _ISR.WakeTime
-            _ProposeWakeTime(wakeTime);
-            
-            // Next task
-            _TaskSwap();
-        } while (_ISR.CurrentTime != wakeTime);
-        
-        // Timeout
-        _TaskStartWork();
-        return std::optional<std::invoke_result_t<T_Fn>>{};
+        // Test whether `deadline` has already passed.
+        //
+        // Because _ISR.CurrentTime rolls over periodically, it's impossible to differentiate
+        // between `deadline` passing versus merely being far in the future. (For example,
+        // consider the case where time is tracked with a uint8_t: if Deadline=127 and
+        // CurrentTime=128, either Deadline passed one tick ago, or Deadline will pass
+        // 255 ticks in the future.)
+        //
+        // We employ a simple heuristic to solve this ambiguity: deadlines must be
+        // within ±TicksMax/2 of _ISR.CurrentTime, where TicksMax is the maximum value that
+        // the `Ticks` type can hold. In other words:
+        //
+        // For a deadline to be considered in the past, it must be in the range:
+        //   [CurrentTime - TicksMax/2, CurrentTime]
+        // For a deadline to be considered in the future, it must be in the range:
+        //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
+        //
+        // Now that interrupts are disabled (and therefore _ISR.CurrentTime is
+        // unchanging), we can employ the above heuristic to determine whether `deadline`
+        // has already passed.
+        constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
+        if (_ISR.CurrentTime-deadline <= TicksMax/2) {
+            return std::optional<std::invoke_result_t<T_Fn>>{};
+        }
+        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
     }
     
     // Wait<tasks>(): sleep current task until `tasks` all stop running
@@ -176,17 +201,17 @@ public:
         // Note that _TaskSwap() (called below) returns with ints disabled as well.
         T_SetInterruptsEnabled(false);
         
-        const Ticks wakeTime = _ISR.CurrentTime+ticks+1;
+        const Deadline deadline = _ISR.CurrentTime+ticks+1;
         do {
-            // Update _ISR.WakeTime
-            _ProposeWakeTime(wakeTime);
+            // Update _ISR.WakeDeadline
+            _ProposeWakeDeadline(deadline);
             
-            // Wait until we wake because _ISR.WakeTime expired (not necessarily
+            // Wait until we wake because _ISR.WakeDeadline expired (not necessarily
             // because of this task though)
             do _TaskSwap();
             while (!_ISR.Wake);
         
-        } while (_ISR.CurrentTime != wakeTime);
+        } while (_ISR.CurrentTime != deadline);
         
         _TaskStartWork();
     }
@@ -212,12 +237,18 @@ public:
         if (_ISR.Wake || _ISR.Delay) return true;
         
         _ISR.CurrentTime++;
-        if (_ISR.CurrentTime == _ISR.WakeTime) {
+        if (_ISR.CurrentTime == _ISR.WakeDeadline) {
             _ISR.Wake = true;
             return true;
         }
         
         return false;
+    }
+    
+    static Ticks CurrentTime() {
+        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+        T_SetInterruptsEnabled(false);
+        return _ISR.CurrentTime();
     }
     
 private:
@@ -292,12 +323,36 @@ private:
         return us / T_UsPerTick;
     }
     
-    static void _ProposeWakeTime(Ticks wakeTime) {
-        const Ticks wakeDelay = wakeTime-_ISR.CurrentTime;
-        const Ticks currentWakeDelay = _ISR.WakeTime-_ISR.CurrentTime;
+    static void _ProposeWakeDeadline(Deadline deadline) {
+        const Ticks wakeDelay = deadline-_ISR.CurrentTime;
+        const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
         if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
-            _ISR.WakeTime = wakeTime;
+            _ISR.WakeDeadline = deadline;
         }
+    }
+    
+    // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
+    // Interrupts must be disabled when calling
+    // Interrupts are enabled upon return
+    template <typename T_Fn>
+    static auto _WaitUntil(Deadline deadline, T_Fn&& fn) {
+        do {
+            const auto r = fn();
+            if (r) {
+                _TaskStartWork();
+                return std::make_optional(r);
+            }
+            
+            // Update _ISR.WakeDeadline
+            _ProposeWakeDeadline(deadline);
+            
+            // Next task
+            _TaskSwap();
+        } while (_ISR.CurrentTime != deadline);
+        
+        // Timeout
+        _TaskStartWork();
+        return std::optional<std::invoke_result_t<T_Fn>>{};
     }
     
     // _GetTask(): returns the _Task& for the given T_Task
@@ -336,7 +391,7 @@ public:
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
-        Ticks WakeTime = 0;
+        Deadline WakeDeadline = 0;
         bool Wake = false;
         std::atomic<bool> Delay = false; // Atomic because we assign without disabling interrupts
     } _ISR;
