@@ -94,10 +94,10 @@ namespace EndpointAttributes {
 };
 
 namespace Language {
-    static constexpr uint16_t English                   = 0x0409;
+    static constexpr uint16_t English = 0x0409;
 };
 
-struct DeviceDescriptor {
+struct [[gnu::packed]] DeviceDescriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
     uint16_t bcdUSB;
@@ -112,14 +112,14 @@ struct DeviceDescriptor {
     uint8_t iProduct;
     uint8_t iSerialNumber;
     uint8_t bNumConfigurations;
-} __attribute__((packed));
-
-namespace ConfigurationCharacteristics {
-    static constexpr uint8_t RemoteWakeup               = 1<<5;
-    static constexpr uint8_t SelfPowered                = 1<<6;
 };
 
-struct ConfigurationDescriptor {
+namespace ConfigurationCharacteristics {
+    static constexpr uint8_t RemoteWakeup   = 1<<5;
+    static constexpr uint8_t SelfPowered    = 1<<6;
+};
+
+struct [[gnu::packed]] ConfigurationDescriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
     uint16_t wTotalLength;
@@ -128,9 +128,9 @@ struct ConfigurationDescriptor {
     uint8_t iConfiguration;
     uint8_t bmAttributes;
     uint8_t bMaxPower;
-} __attribute__((packed));
+};
 
-struct InterfaceDescriptor {
+struct [[gnu::packed]] InterfaceDescriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
     uint8_t bInterfaceNumber;
@@ -140,18 +140,18 @@ struct InterfaceDescriptor {
     uint8_t bInterfaceSubClass;
     uint8_t bInterfaceProtocol;
     uint8_t iInterface;
-} __attribute__((packed));
+};
 
-struct EndpointDescriptor {
+struct [[gnu::packed]] EndpointDescriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
     uint8_t bEndpointAddress;
     uint8_t bmAttributes;
     uint16_t wMaxPacketSize;
     uint8_t bInterval;
-} __attribute__((packed));
+};
 
-struct DeviceQualifierDescriptor {
+struct [[gnu::packed]] DeviceQualifierDescriptor {
     uint8_t bLength;
     uint8_t bType;
     uint16_t bcdUSB;
@@ -161,15 +161,15 @@ struct DeviceQualifierDescriptor {
     uint8_t bMaxPacketSize0;
     uint8_t bNumConfigurations;
     uint8_t bReserved;
-} __attribute__((packed));
+};
 
-struct StringDescriptor {
+struct [[gnu::packed]] StringDescriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
-} __attribute__((packed));
+};
 
 template <size_t N>
-struct StringDescriptorN : StringDescriptor {
+struct [[gnu::packed]] StringDescriptorN : StringDescriptor {
     static_assert(N <= 126, "max character count is 126 (2 string descriptor header bytes + 126 UTF-16 characters == 2 + 2*126 == 254; more than that overflows bLength)");
     uint16_t str[N] = {};
     
@@ -193,7 +193,7 @@ struct StringDescriptorN : StringDescriptor {
         return r;
     }
     
-} __attribute__((packed));
+};
 
 using StringDescriptorMax = StringDescriptorN<126>;
 
@@ -203,7 +203,7 @@ constexpr auto StringDescriptorMake(const char (&str)[N]) {
 }
 
 template <size_t N>
-struct SupportedLanguagesDescriptorN : StringDescriptor {
+struct [[gnu::packed]] SupportedLanguagesDescriptorN : StringDescriptor {
     uint16_t langs[N] = {};
     
     constexpr SupportedLanguagesDescriptorN(const uint16_t (&l)[N]) :
@@ -212,20 +212,20 @@ struct SupportedLanguagesDescriptorN : StringDescriptor {
             langs[i] = Endian::LFH_U16(l[i]);
         }
     }
-} __attribute__((packed));
+};
 
 template <size_t N>
 constexpr auto SupportedLanguagesDescriptorMake(const uint16_t (&langs)[N]) {
     return SupportedLanguagesDescriptorN<N>(langs);
 }
 
-struct SetupRequest {
+struct [[gnu::packed]] SetupRequest {
     uint8_t bmRequestType;
     uint8_t bRequest;
     uint16_t wValue;
     uint16_t wIndex;
     uint16_t wLength;
-} __attribute__((packed));
+};
 
 namespace CDC {
 
@@ -244,42 +244,42 @@ namespace Request {
     static constexpr uint8_t SEND_BREAK                 = 0x23;
 };
 
-struct HeaderFunctionalDescriptor {
+struct [[gnu::packed]] HeaderFunctionalDescriptor {
     uint8_t bFunctionLength;
     uint8_t bDescriptorType;
     uint8_t bDescriptorSubtype;
     uint16_t bcdCDC;
-} __attribute__((packed));
+};
 
-struct AbstractControlManagementFunctionalDescriptor {
+struct [[gnu::packed]] AbstractControlManagementFunctionalDescriptor {
     uint8_t bFunctionLength;
     uint8_t bDescriptorType;
     uint8_t bDescriptorSubtype;
     uint8_t bmCapabilities;
-} __attribute__((packed));
+};
 
-struct UnionFunctionalDescriptor {
+struct [[gnu::packed]] UnionFunctionalDescriptor {
     uint8_t bFunctionLength;
     uint8_t bDescriptorType;
     uint8_t bDescriptorSubtype;
     uint8_t bMasterInterface;
     uint8_t bSlaveInterface0;
-} __attribute__((packed));
+};
 
-struct CallManagementFunctionalDescriptor {
+struct [[gnu::packed]] CallManagementFunctionalDescriptor {
     uint8_t bFunctionLength;
     uint8_t bDescriptorType;
     uint8_t bDescriptorSubtype;
     uint8_t bmCapabilities;
     uint8_t bDataInterface;
-} __attribute__((packed));
+};
 
-struct LineCoding {
+struct [[gnu::packed]] LineCoding {
     uint32_t dwDTERate;
     uint8_t bCharFormat;
     uint8_t bParityType;
     uint8_t bDataBits;
-} __attribute__((packed));
+};
 
 } // namespace CDC
 
