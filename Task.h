@@ -12,8 +12,6 @@ using TaskFn = void(*)();
 
 struct TaskOptions {
     TaskFn AutoStart = nullptr;
-    TaskFn WillStart = nullptr;
-    TaskFn DidStop = nullptr;
 };
 
 template <
@@ -38,10 +36,6 @@ public:
         task.run = fn;
         task.cont = _TaskSwapInit;
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-        
-        if constexpr (T_Task::Options.WillStart) {
-            T_Task::Options.WillStart();
-        }
     }
     
     // Start<task>(): starts `task` running with the Run() function
@@ -55,10 +49,6 @@ public:
     static void Stop() {
         constexpr _Task& task = _GetTask<T_Task>();
         task.cont = _TaskNop;
-        
-        if constexpr (T_Task::Options.DidStop) {
-            T_Task::Options.DidStop();
-        }
     }
     
     // Running<task>(): returns whether `task` is running
