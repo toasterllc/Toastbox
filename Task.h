@@ -44,6 +44,12 @@ public:
         }
     }
     
+    // Start<task>(): starts `task` running with the Run() function
+    template <typename T_Task>
+    static void Start() {
+        Start<T_Task>(T_Task::Run);
+    }
+    
     // Stop<task>(): stops `task`
     template <typename T_Task>
     static void Stop() {
@@ -248,7 +254,7 @@ public:
     static Ticks CurrentTime() {
         // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
         T_SetInterruptsEnabled(false);
-        return _ISR.CurrentTime();
+        return _ISR.CurrentTime;
     }
     
 private:
