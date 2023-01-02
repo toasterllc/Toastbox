@@ -10,91 +10,123 @@ namespace Toastbox::USB {
 
 // Descriptor Type (bDescriptorType, wValue [high byte])
 namespace DescriptorType {
-    static constexpr uint8_t Device                     = 1;
-    static constexpr uint8_t Configuration              = 2;
-    static constexpr uint8_t String                     = 3;
-    static constexpr uint8_t Interface                  = 4;
-    static constexpr uint8_t Endpoint                   = 5;
-    static constexpr uint8_t DeviceQualifier            = 6;
-    static constexpr uint8_t OtherSpeedConfiguration    = 7;
-    static constexpr uint8_t InterfacePower             = 8;
+    constexpr uint8_t Device                    = 1;
+    constexpr uint8_t Configuration             = 2;
+    constexpr uint8_t String                    = 3;
+    constexpr uint8_t Interface                 = 4;
+    constexpr uint8_t Endpoint                  = 5;
+    constexpr uint8_t DeviceQualifier           = 6;
+    constexpr uint8_t OtherSpeedConfiguration   = 7;
+    constexpr uint8_t InterfacePower            = 8;
 };
 
 // Request (bRequest)
 namespace Request {
-    static constexpr uint8_t GetStatus                  = 0;
-    static constexpr uint8_t ClearFeature               = 1;
-    static constexpr uint8_t _Reserved0                 = 2;
-    static constexpr uint8_t SetFeature                 = 3;
-    static constexpr uint8_t _Reserved1                 = 4;
-    static constexpr uint8_t SetAddress                 = 5;
-    static constexpr uint8_t GetDescriptor              = 6;
-    static constexpr uint8_t SetDescriptor              = 7;
-    static constexpr uint8_t GetConfiguration           = 8;
-    static constexpr uint8_t SetConfiguration           = 9;
-    static constexpr uint8_t GetInterface               = 10;
-    static constexpr uint8_t SetInterface               = 11;
-    static constexpr uint8_t SynchFrame                 = 12;
+    constexpr uint8_t GetStatus                 = 0;
+    constexpr uint8_t ClearFeature              = 1;
+    constexpr uint8_t _Reserved0                = 2;
+    constexpr uint8_t SetFeature                = 3;
+    constexpr uint8_t _Reserved1                = 4;
+    constexpr uint8_t SetAddress                = 5;
+    constexpr uint8_t GetDescriptor             = 6;
+    constexpr uint8_t SetDescriptor             = 7;
+    constexpr uint8_t GetConfiguration          = 8;
+    constexpr uint8_t SetConfiguration          = 9;
+    constexpr uint8_t GetInterface              = 10;
+    constexpr uint8_t SetInterface              = 11;
+    constexpr uint8_t SynchFrame                = 12;
 };
 
 // Request Type (bmRequestType)
 namespace RequestType {
-    static constexpr uint8_t DirectionOut               = 0x00;
-    static constexpr uint8_t DirectionIn                = 0x80;
-    static constexpr uint8_t DirectionMask              = 0x80;
+    constexpr uint8_t DirectionOut              = 0x00;
+    constexpr uint8_t DirectionIn               = 0x80;
+    constexpr uint8_t DirectionMask             = 0x80;
     
-    static constexpr uint8_t TypeStandard               = 0x00;
-    static constexpr uint8_t TypeClass                  = 0x20;
-    static constexpr uint8_t TypeVendor                 = 0x40;
-    static constexpr uint8_t TypeReserved               = 0x60;
-    static constexpr uint8_t TypeMask                   = 0x60;
+    constexpr uint8_t TypeStandard              = 0x00;
+    constexpr uint8_t TypeClass                 = 0x20;
+    constexpr uint8_t TypeVendor                = 0x40;
+    constexpr uint8_t TypeReserved              = 0x60;
+    constexpr uint8_t TypeMask                  = 0x60;
     
-    static constexpr uint8_t RecipientDevice            = 0x00;
-    static constexpr uint8_t RecipientInterface         = 0x01;
-    static constexpr uint8_t RecipientEndpoint          = 0x02;
-    static constexpr uint8_t RecipientOther             = 0x03;
-    static constexpr uint8_t RecipientMask              = 0x1F;
+    constexpr uint8_t RecipientDevice           = 0x00;
+    constexpr uint8_t RecipientInterface        = 0x01;
+    constexpr uint8_t RecipientEndpoint         = 0x02;
+    constexpr uint8_t RecipientOther            = 0x03;
+    constexpr uint8_t RecipientMask             = 0x1F;
 };
 
 namespace Endpoint {
-    static constexpr size_t MaxPacketSizeCtrl           = 64;
-    static constexpr size_t MaxPacketSizeBulk           = 512;
+    constexpr size_t MaxPacketSizeCtrl          = 64;
+    constexpr size_t MaxPacketSizeBulk          = 512;
     
-    static constexpr uint8_t MaxCountOut                = 16; // Max number of endpoints, OUT
-    static constexpr uint8_t MaxCountIn                 = 16; // Max number of endpoints, IN
-    static constexpr uint8_t MaxCount                   = 32; // Max number of endpoints, total
+    constexpr uint8_t MaxCountOut               = 16; // Max number of endpoints, OUT
+    constexpr uint8_t MaxCountIn                = 16; // Max number of endpoints, IN
+    constexpr uint8_t MaxCount                  = 32; // Max number of endpoints, total
     
-    static constexpr uint8_t DefaultOut                 = 0x00; // Default control endpoint, OUT
-    static constexpr uint8_t DefaultIn                  = 0x80; // Default control endpoint, IN
+    constexpr uint8_t DefaultOut                = 0x00; // Default control endpoint, OUT
+    constexpr uint8_t DefaultIn                 = 0x80; // Default control endpoint, IN
     
-    static constexpr uint8_t DirectionOut               = 0x00;
-    static constexpr uint8_t DirectionIn                = 0x80;
-    static constexpr uint8_t DirectionMask              = 0x80;
+    constexpr uint8_t DirectionOut              = 0x00;
+    constexpr uint8_t DirectionIn               = 0x80;
+    constexpr uint8_t DirectionMask             = 0x80;
     
-    static constexpr uint8_t IndexMask                  = 0x0F;
+    constexpr uint8_t IndexMask                 = 0x0F;
+    
+    constexpr uint8_t Idx(uint8_t ep)   { return ep&IndexMask;                          }
+    constexpr bool Out(uint8_t ep)      { return (ep&DirectionMask) == DirectionOut;    }
+    constexpr bool In(uint8_t ep)       { return (ep&DirectionMask) == DirectionIn;     }
+    
+    template <size_t N>
+    constexpr size_t CountOut(const uint8_t (&eps)[N]) {
+        size_t count = 0;
+        for (uint8_t ep : eps) count += Out(ep);
+        return count;
+    }
+    
+    template <size_t N>
+    constexpr size_t CountIn(const uint8_t (&eps)[N]) {
+        size_t count = 0;
+        for (uint8_t ep : eps) count += In(ep);
+        return count;
+    }
+    
+    template <size_t N>
+    constexpr inline size_t MaxPacketSizeOut(const uint8_t (&eps)[N]) {
+        // Don't have OUT endpoints: MPS=control transfer MPS (64)
+        // Do have OUT endpoints: MPS=bulk transfer MPS (512, the only value that the spec allows for HS bulk endpoints)
+        return !CountOut(eps) ? MaxPacketSizeCtrl : MaxPacketSizeBulk;
+    }
+    
+    template <size_t N>
+    constexpr inline size_t MaxPacketSizeIn(const uint8_t (&eps)[N]) {
+        // Don't have IN endpoints: MPS=control transfer MPS (64)
+        // Do have IN endpoints: MPS=bulk transfer MPS (512, the only value that the spec allows for HS bulk endpoints)
+        return !CountIn(eps) ? MaxPacketSizeCtrl : MaxPacketSizeBulk;
+    }
 };
 
 // Endpoint Attributes (bmAttributes)
 namespace EndpointAttributes {
-    static constexpr uint8_t TransferControl                    = 0x00;
-    static constexpr uint8_t TransferIsochronous                = 0x01;
-    static constexpr uint8_t TransferBulk                       = 0x02;
-    static constexpr uint8_t TransferInterrupt                  = 0x03;
+    constexpr uint8_t TransferControl                   = 0x00;
+    constexpr uint8_t TransferIsochronous               = 0x01;
+    constexpr uint8_t TransferBulk                      = 0x02;
+    constexpr uint8_t TransferInterrupt                 = 0x03;
     
     namespace Isochronous {
-        static constexpr uint8_t SynchronizationNone            = 0x00;
-        static constexpr uint8_t SynchronizationAsynchronous    = 0x04;
-        static constexpr uint8_t SynchronizationAdaptive        = 0x08;
-        static constexpr uint8_t SynchronizationSynchronous     = 0x0C;
+        constexpr uint8_t SynchronizationNone           = 0x00;
+        constexpr uint8_t SynchronizationAsynchronous   = 0x04;
+        constexpr uint8_t SynchronizationAdaptive       = 0x08;
+        constexpr uint8_t SynchronizationSynchronous    = 0x0C;
         
-        static constexpr uint8_t UsageData                      = 0x00;
-        static constexpr uint8_t UsageFeedback                  = 0x10;
-        static constexpr uint8_t UsageImplicitFeedbackData      = 0x20;
+        constexpr uint8_t UsageData                     = 0x00;
+        constexpr uint8_t UsageFeedback                 = 0x10;
+        constexpr uint8_t UsageImplicitFeedbackData     = 0x20;
     };
 };
 
 namespace Language {
-    static constexpr uint16_t English = 0x0409;
+    constexpr uint16_t English = 0x0409;
 };
 
 struct [[gnu::packed]] DeviceDescriptor {
@@ -115,8 +147,8 @@ struct [[gnu::packed]] DeviceDescriptor {
 };
 
 namespace ConfigurationCharacteristics {
-    static constexpr uint8_t RemoteWakeup   = 1<<5;
-    static constexpr uint8_t SelfPowered    = 1<<6;
+    constexpr uint8_t RemoteWakeup   = 1<<5;
+    constexpr uint8_t SelfPowered    = 1<<6;
 };
 
 struct [[gnu::packed]] ConfigurationDescriptor {
@@ -233,15 +265,15 @@ namespace CDC {
 // Version 1.1
 
 namespace Request {
-    static constexpr uint8_t SEND_ENCAPSULATED_COMMAND  = 0x00;
-    static constexpr uint8_t GET_ENCAPSULATED_RESPONSE  = 0x01;
-    static constexpr uint8_t SET_COMM_FEATURE           = 0x02;
-    static constexpr uint8_t GET_COMM_FEATURE           = 0x03;
-    static constexpr uint8_t CLEAR_COMM_FEATURE         = 0x04;
-    static constexpr uint8_t SET_LINE_CODING            = 0x20;
-    static constexpr uint8_t GET_LINE_CODING            = 0x21;
-    static constexpr uint8_t SET_CONTROL_LINE_STATE     = 0x22;
-    static constexpr uint8_t SEND_BREAK                 = 0x23;
+    constexpr uint8_t SEND_ENCAPSULATED_COMMAND = 0x00;
+    constexpr uint8_t GET_ENCAPSULATED_RESPONSE = 0x01;
+    constexpr uint8_t SET_COMM_FEATURE          = 0x02;
+    constexpr uint8_t GET_COMM_FEATURE          = 0x03;
+    constexpr uint8_t CLEAR_COMM_FEATURE        = 0x04;
+    constexpr uint8_t SET_LINE_CODING           = 0x20;
+    constexpr uint8_t GET_LINE_CODING           = 0x21;
+    constexpr uint8_t SET_CONTROL_LINE_STATE    = 0x22;
+    constexpr uint8_t SEND_BREAK                = 0x23;
 };
 
 struct [[gnu::packed]] HeaderFunctionalDescriptor {
