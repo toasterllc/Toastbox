@@ -38,12 +38,6 @@ public:
         task.sp = T_Task::Stack + sizeof(T_Task::Stack);
     }
     
-    // Start<task>(): starts `task` running with the Run() function
-    template <typename T_Task>
-    static void Start() {
-        Start<T_Task>(T_Task::Run);
-    }
-    
     // Stop<task>(): stops `task`
     template <typename T_Task>
     static void Stop() {
