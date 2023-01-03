@@ -118,8 +118,11 @@ public:
     // `fn` must not cause any task to become runnable.
     // If it does, the scheduler may not notice that the task is runnable and
     // could go to sleep instead of running the task.
+    // Interrupts are disabled while calling `fn`
     template <typename T_Fn>
     static auto Wait(T_Fn&& fn) {
+        // Ints must be disabled when calling `fn`
+        T_SetInterruptsEnabled(false);
         for (;;) {
             const auto r = fn();
             if (!r) {
@@ -132,15 +135,25 @@ public:
         }
     }
     
+    // Wait(): sleep current task until `fn` returns true, or `ticks` have passed.
+    // `fn` must not cause any task to become runnable.
+    // If it does, the scheduler may not notice that the task is runnable and
+    // could go to sleep instead of running the task.
+    // Interrupts are disabled while calling `fn`
     template <typename T_Fn>
     static auto Wait(Ticks ticks, T_Fn&& fn) {
-        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime,
+        // and also because _WaitUntil() requires ints to be disabled.
         T_SetInterruptsEnabled(false);
         const Deadline deadline = _ISR.CurrentTime+ticks+1;
         return _WaitUntil(deadline, std::forward<T_Fn>(fn));
     }
     
     // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
+    // `fn` must not cause any task to become runnable.
+    // If it does, the scheduler may not notice that the task is runnable and
+    // could go to sleep instead of running the task.
+    // Interrupts are disabled while calling `fn`
     //
     // For a deadline to be considered in the past, it must be in the range:
     //   [CurrentTime - TicksMax/2, CurrentTime]
@@ -152,7 +165,8 @@ public:
     // See relevent comment in function body.
     template <typename T_Fn>
     static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
-        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
+        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime,
+        // and also because _WaitUntil() requires ints to be disabled.
         T_SetInterruptsEnabled(false);
         
         // Test whether `deadline` has already passed.
@@ -295,12 +309,14 @@ private:
     }
     
     // _TaskSwapInit(): swap task in and jump to _TaskStart
+    // Interrupts must be disabled when calling
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
         TaskSwap(_TaskStart, _CurrentTask->sp);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
+    // Interrupts must be disabled when calling
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
         // ## Architecture = ARM32, large memory model
@@ -319,6 +335,9 @@ private:
         return us / T_UsPerTick;
     }
     
+    // _ProposeWakeDeadline(): update _ISR.WakeDeadline with a new deadline,
+    // if it occurs before the existing deadline.
+    // Interrupts must be disabled when calling
     static void _ProposeWakeDeadline(Deadline deadline) {
         const Ticks wakeDelay = deadline-_ISR.CurrentTime;
         const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
