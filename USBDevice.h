@@ -374,7 +374,7 @@ public:
         };
         
         IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequestTO>(&usbReq);
-        _CheckErr(ior, "DeviceRequest failed");
+        _CheckErr(ior, "DeviceRequestTO failed");
     }
     
     const SendRight& service() const { return _service; }
