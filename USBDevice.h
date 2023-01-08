@@ -337,22 +337,22 @@ public:
         return desc;
     }
     
-    template <typename T_EPAddr, typename... T_Args>
-    auto read(T_EPAddr epAddr, T_Args&&... args) {
+    template <typename... T_Args>
+    auto read(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo((uint8_t)epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         return iface.read(epInfo.pipeRef, std::forward<T_Args>(args)...);
     }
     
-    template <typename T_EPAddr, typename... T_Args>
-    void write(T_EPAddr epAddr, T_Args&&... args) {
+    template <typename... T_Args>
+    void write(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo((uint8_t)epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.write(epInfo.pipeRef, std::forward<T_Args>(args)...);
     }
     
-    template <typename T_EPAddr, typename... T_Args>
-    void reset(T_EPAddr epAddr, T_Args&&... args) {
+    template <typename... T_Args>
+    void reset(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo((uint8_t)epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -522,15 +522,14 @@ private:
         return desc;
     }
     
-    template <typename T_EPAddr, typename T_Dst>
-    void read(T_EPAddr epAddr, T_Dst& dst, Milliseconds timeout=Forever) {
+    template <typename T_Dst>
+    void read(uint8_t epAddr, T_Dst& dst, Milliseconds timeout=Forever) {
         const size_t len = read((uint8_t)epAddr, (void*)&dst, sizeof(dst), timeout);
         if (len != sizeof(dst)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
             (uintmax_t)sizeof(dst), (uintmax_t)len);
     }
     
-    template <typename T_EPAddr>
-    size_t read(T_EPAddr epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
+    size_t read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
         _claimInterfaceForEndpointAddr((uint8_t)epAddr);
         int xferLen = 0;
         int ir = libusb_bulk_transfer(_handle, (uint8_t)epAddr, (uint8_t*)buf, (int)len, &xferLen,
@@ -539,13 +538,12 @@ private:
         return xferLen;
     }
     
-    template <typename T_EPAddr, typename T_Src>
-    void write(T_EPAddr epAddr, T_Src& src, Milliseconds timeout=Forever) {
+    template <typename T_Src>
+    void write(uint8_t epAddr, T_Src& src, Milliseconds timeout=Forever) {
         write((uint8_t)epAddr, (void*)&src, sizeof(src), timeout);
     }
     
-    template <typename T_EPAddr>
-    void write(T_EPAddr epAddr, const void* buf, size_t len, Milliseconds timeout=Forever) {
+    void write(uint8_t epAddr, const void* buf, size_t len, Milliseconds timeout=Forever) {
         _claimInterfaceForEndpointAddr((uint8_t)epAddr);
         
         int xferLen = 0;
@@ -556,8 +554,7 @@ private:
             throw RuntimeError("libusb_bulk_transfer short write (tried: %zu, got: %zu)", len, (size_t)xferLen);
     }
     
-    template <typename T_EPAddr>
-    void reset(T_EPAddr epAddr) {
+    void reset(uint8_t epAddr) {
         _claimInterfaceForEndpointAddr((uint8_t)epAddr);
         int ir = libusb_clear_halt(_handle, (uint8_t)epAddr);
         _CheckErr(ir, "libusb_clear_halt failed");
@@ -658,8 +655,7 @@ private:
     
 public:
     
-    template <typename T_EPAddr>
-    uint16_t maxPacketSize(T_EPAddr epAddr) const {
+    uint16_t maxPacketSize(uint8_t epAddr) const {
         const _EndpointInfo& epInfo = _epInfo((uint8_t)epAddr);
         return epInfo.maxPacketSize;
     }
