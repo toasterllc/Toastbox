@@ -64,15 +64,13 @@ namespace Endpoint {
     constexpr uint8_t MaxCountIn                = 16; // Max number of endpoints, IN
     constexpr uint8_t MaxCount                  = 32; // Max number of endpoints, total
     
-    constexpr uint8_t Default                   = 0x00; // Default control endpoint
-//    constexpr uint8_t DefaultOut                = 0x00; // Default control endpoint, OUT
-//    constexpr uint8_t DefaultIn                 = 0x80; // Default control endpoint, IN
-    
     constexpr uint8_t DirectionOut              = 0x00;
     constexpr uint8_t DirectionIn               = 0x80;
     constexpr uint8_t DirectionMask             = 0x80;
     
     constexpr uint8_t IndexMask                 = 0x0F;
+    
+    constexpr uint8_t Default                   = 0x00; // Default control endpoint
     
     constexpr uint8_t Idx(uint8_t ep)   { return ep&IndexMask;                          }
     constexpr bool Out(uint8_t ep)      { return (ep&DirectionMask) == DirectionOut;    }

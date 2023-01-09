@@ -241,7 +241,7 @@ public:
                 IOReturn ior = iface.iokitExec<&IOUSBInterfaceInterface::GetNumEndpoints>(&epCount);
                 _CheckErr(ior, "GetNumEndpoints failed");
                 
-                for (uint8_t pipeRef=0; pipeRef<=epCount; pipeRef++) {
+                for (uint8_t pipeRef=1; pipeRef<=epCount; pipeRef++) {
                     IOUSBEndpointProperties props = { .bVersion = kUSBEndpointPropertiesVersion3 };
                     ior = iface.iokitExec<&IOUSBInterfaceInterface::GetPipePropertiesV3>(pipeRef, &props);
                     _CheckErr(ior, "GetPipePropertiesV3 failed");
@@ -356,20 +356,33 @@ public:
     
     template <typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
-        const _EndpointInfo& epInfo = _epInfo(epAddr);
-        _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        // If we're resetting the default control endpoint, clear a potential stall condition
+        // simply by sending a control transfer.
+        // For some reason on macOS, a standard request is necessary to clear the stall condition,
+        // while a vendor request doesn't work, even though the USB spec says "the STALL condition
+        // terminates at the beginning of the next control transfer". It seems any control transfer
+        // (standard or vendor) would work, but on macOS apparently only standard control transfers
+        // work.
+        if (USB::Endpoint::Idx(epAddr) == USB::Endpoint::Idx(USB::Endpoint::Default)) {
+            uint8_t status[2];
+            IOUSBDevRequest usbReq = {
+                .bmRequestType      = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
+                .bRequest           = USB::Request::GetStatus,
+                .wValue             = 0,
+                .wIndex             = 0,
+                .wLength            = sizeof(data),
+                .pData              = data,
+                .wLenDone           = 0,
+            };
+            
+            IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
+            _CheckErr(ior, "DeviceRequest failed");
         
-//        if (USB::Endpoint::Idx(epAddr) == USB::Endpoint::Idx(USB::Endpoint::Default)) {
-//            _openIfNeeded();
-//            IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceAbortPipeZero>();
-//            _CheckErr(ior, "USBDeviceAbortPipeZero failed");
-//        
-//        } else {
-//            const _EndpointInfo& epInfo = _epInfo(epAddr);
-//            _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-//            iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
-//        }
+        } else {
+            const _EndpointInfo& epInfo = _epInfo(epAddr);
+            _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
+            iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        }
     }
     
     template <typename T>
@@ -569,9 +582,26 @@ private:
     }
     
     void reset(uint8_t epAddr) {
-        _claimInterfaceForEndpointAddr(epAddr);
-        int ir = libusb_clear_halt(_handle, epAddr);
-        _CheckErr(ir, "libusb_clear_halt failed");
+        // If we're resetting the default control endpoint, clear a potential stall condition
+        // simply by sending a control transfer.
+        // See the macOS implementation of reset(epAddr) for more info.
+        if (USB::Endpoint::Idx(epAddr) == USB::Endpoint::Idx(USB::Endpoint::Default)) {
+            const uint8_t bmRequestType =
+                USB::RequestType::DirectionIn       |
+                USB::RequestType::TypeStandard      |
+                USB::RequestType::RecipientDevice   ;
+            const uint8_t bRequest = USB::Reqest::GetStatus;
+            const uint8_t wValue = 0;
+            const uint8_t wIndex = 0;
+            uint8_t status[2];
+            int ir = libusb_control_transfer(_handle, bmRequestType, bRequest, wValue, wIndex, (uint8_t*)status, sizeof(status), 0);
+            _CheckErr(ir, "libusb_control_transfer failed");
+        
+        } else {
+            _claimInterfaceForEndpointAddr(epAddr);
+            int ir = libusb_clear_halt(_handle, epAddr);
+            _CheckErr(ir, "libusb_clear_halt failed");
+        }
     }
     
     template <typename T>
