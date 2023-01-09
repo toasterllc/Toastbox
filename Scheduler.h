@@ -242,10 +242,16 @@ public:
         _TaskStartWork();
     }
     
-    // Wait(fn): sleep current task until `fn` returns true
+    // Wait(fn): sleep current task until `fn` returns true.
     // `fn` must not cause any task to become runnable.
     // If it does, the scheduler may not notice that the task is runnable and
     // could go to sleep instead of running the task.
+    //
+    // If ints are disabled before calling Wait(), ints are guaranteed to have
+    // remained disabled between `fn` executing and Wait() returning, and
+    // therefore the condition that `fn` checks is guaranteed to remain true
+    // after Wait() returns.
+    //
     // Ints are disabled while calling `fn`
     template <typename T_Fn>
     static auto Wait(T_Fn&& fn) {
@@ -253,7 +259,6 @@ public:
         //   - ints must be disabled when calling `fn`
         //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
-        
         for (;;) {
             const auto r = fn();
             if (!r) {
@@ -267,10 +272,7 @@ public:
     }
     
     // Wait(): sleep current task until `fn` returns true, or `ticks` have passed.
-    // `fn` must not cause any task to become runnable.
-    // If it does, the scheduler may not notice that the task is runnable and
-    // could go to sleep instead of running the task.
-    // Ints are disabled while calling `fn`
+    // See Wait() function above for more info.
     template <typename T_Fn>
     static auto Wait(Ticks ticks, T_Fn&& fn) {
         // IntState:
@@ -283,10 +285,6 @@ public:
     }
     
     // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-    // `fn` must not cause any task to become runnable.
-    // If it does, the scheduler may not notice that the task is runnable and
-    // could go to sleep instead of running the task.
-    // Ints are disabled while calling `fn`
     //
     // For a deadline to be considered in the past, it must be in the range:
     //   [CurrentTime - TicksMax/2, CurrentTime]
@@ -295,7 +293,9 @@ public:
     //
     // where TicksMax is the maximum value that the `Ticks` type can hold.
     //
-    // See relevent comment in function body.
+    // See comment in function body for more info regarding the deadline parameter.
+    //
+    // See Wait() function above for more info.
     template <typename T_Fn>
     static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
         // IntState:
@@ -312,9 +312,10 @@ public:
         // CurrentTime=128, either Deadline passed one tick ago, or Deadline will pass
         // 255 ticks in the future.)
         //
-        // We employ a simple heuristic to solve this ambiguity: deadlines must be
-        // within ±TicksMax/2 of _ISR.CurrentTime, where TicksMax is the maximum value that
-        // the `Ticks` type can hold. In other words:
+        // To solve this ambiguity, we require deadlines to be within
+        // [-TicksMax/2, +TicksMax/2+1] of _ISR.CurrentTime (where TicksMax is the maximum
+        // value that the `Ticks` type can hold), which allows us to employ the following
+        // heuristic:
         //
         // For a deadline to be considered in the past, it must be in the range:
         //   [CurrentTime - TicksMax/2, CurrentTime]
