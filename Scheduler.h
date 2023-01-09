@@ -325,7 +325,8 @@ public:
         // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
         // can employ the above heuristic to determine whether `deadline` has already passed.
         constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
-        if (_ISR.CurrentTime-deadline <= TicksMax/2) {
+        const bool deadlinePassed = _ISR.CurrentTime-deadline <= TicksMax/2;
+        if (deadlinePassed) {
             return std::optional<std::invoke_result_t<T_Fn>>{};
         }
         return _WaitUntil(deadline, std::forward<T_Fn>(fn));
