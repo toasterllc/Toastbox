@@ -353,9 +353,16 @@ public:
     
     template <typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
-        const _EndpointInfo& epInfo = _epInfo(epAddr);
-        _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        if (USB::Endpoint::Idx(epAddr) == USB::Endpoint::Idx(USB::Endpoint::Default)) {
+            _openIfNeeded();
+            IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceAbortPipeZero>();
+            _CheckErr(ior, "USBDeviceAbortPipeZero failed");
+        
+        } else {
+            const _EndpointInfo& epInfo = _epInfo(epAddr);
+            _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
+            iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        }
     }
     
     template <typename T>
@@ -407,19 +414,19 @@ private:
 //        return _interfaces.at(ifaceIdx);
 //    }
 //    
-//    void _openIfNeeded() {
-//        if (_open) return;
-//        // Open the device
-//        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
-//        _CheckErr(ior, "USBDeviceOpen failed");
-//        _open = true;
-//    }
+    void _openIfNeeded() {
+        if (_open) return;
+        // Open the device
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
+        _CheckErr(ior, "USBDeviceOpen failed");
+        _open = true;
+    }
     
     SendRight _service;
     _IOUSBDeviceInterface _iokitInterface;
     std::vector<_Interface> _interfaces;
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount];
-//    bool _open = false;
+    bool _open = false;
     
 #elif __linux__
     
