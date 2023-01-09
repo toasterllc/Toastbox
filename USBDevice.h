@@ -590,7 +590,7 @@ private:
                 USB::RequestType::DirectionIn       |
                 USB::RequestType::TypeStandard      |
                 USB::RequestType::RecipientDevice   ;
-            const uint8_t bRequest = USB::Reqest::GetStatus;
+            const uint8_t bRequest = USB::Request::GetStatus;
             const uint8_t wValue = 0;
             const uint8_t wIndex = 0;
             uint8_t status[2];
