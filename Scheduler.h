@@ -4,47 +4,140 @@
 #include <cstdlib>
 #include <atomic>
 #include <optional>
-#include "Toastbox/TaskSwap.h"
 
 namespace Toastbox {
 
+// MARK: - IntState
 class IntState {
 public:
     // Functions provided by client
-    static bool InterruptsEnabled();
-    static void SetInterruptsEnabled(bool en);
+    static bool Get();
+    static void Set(bool en);
     
     IntState() {
-        _prevEn = InterruptsEnabled();
+        _prev = Get();
     }
     
     IntState(bool en) {
-        _prevEn = InterruptsEnabled();
-        SetInterruptsEnabled(en);
+        _prev = Get();
+        Set(en);
     }
     
     IntState(const IntState& x) = delete;
     IntState(IntState&& x)      = delete;
     
     ~IntState() {
-        SetInterruptsEnabled(_prevEn);
+        Set(_prev);
     }
     
     void enable() {
-        SetInterruptsEnabled(true);
+        Set(true);
     }
     
     void disable() {
-        SetInterruptsEnabled(false);
+        Set(false);
     }
     
     void restore() {
-        SetInterruptsEnabled(_prevEn);
+        Set(_prev);
     }
     
 private:
-    bool _prevEn = false;
+    bool _prev = false;
 };
+
+// MARK: - TaskSwap
+
+// TaskSwap(): architecture-specific macro that swaps the current task
+// with a different task. Steps:
+//
+// (1) Push callee-saved regs onto stack, including $PC if needed
+// (2) tmp = $SP
+// (3) $SP = `sp`
+// (4) `sp` = tmp
+// if `initFn` != nullptr:
+//   (5) Jump to `initFn`
+// else
+//   (6) Pop callee-saved registers from stack
+//   (7) Return to caller
+
+#if defined(TaskMSP430)
+
+#define TaskSwap(initFn, sp)                                                            \
+                                                                                        \
+    if constexpr (sizeof(void*) == 2) {                                                 \
+        /* ## Architecture = MSP430, small memory model */                              \
+        asm volatile("pushm #7, r10" : : : );                           /* (1) */       \
+        asm volatile("mov sp, r11" : : : "r11");                        /* (2) */       \
+        asm volatile("mov %0, sp" : : "m" (sp) : );                     /* (3) */       \
+        asm volatile("mov r11, %0" : "=m" (sp) : : );                   /* (4) */       \
+        if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
+            asm volatile("br %0" : : "i" (initFn) : );                  /* (5) */       \
+        } else {                                                                        \
+            asm volatile("popm #7, r10" : : : );                        /* (6) */       \
+            asm volatile("ret" : : : );                                 /* (7) */       \
+        }                                                                               \
+    } else {                                                                            \
+        /* ## Architecture = MSP430, large memory model */                              \
+        asm volatile("pushm.a #7, r10" : : : );                         /* (1) */       \
+        asm volatile("mov.a sp, r11" : : : "r11");                      /* (2) */       \
+        asm volatile("mov.a %0, sp" : : "m" (sp) : );                   /* (3) */       \
+        asm volatile("mov.a r11, %0" : "=m" (sp) : : );                 /* (4) */       \
+        if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                 \
+            asm volatile("br.a %0" : : "i" (initFn) : );                /* (5) */       \
+        } else {                                                                        \
+            asm volatile("popm.a #7, r10" : : : );                      /* (6) */       \
+            asm volatile("ret.a" : : : );                               /* (7) */       \
+        }                                                                               \
+    }
+
+#elif defined(TaskARM32)
+
+#define TaskSwap(initFn, sp)                                                            \
+                                                                                        \
+    /* ## Architecture = ARM32 */                                                       \
+    asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
+    asm volatile("mov r0, sp" : : : );                                  /* (2) */       \
+                                                                                        \
+    /* Toggle between the main stack pointer (MSP) and process stack pointer (PSP)      \
+       when swapping tasks:                                                             \
+                                                                                        \
+        Entering task (exiting scheduler): use PSP                                      \
+        Entering scheduler (exiting task): use MSP                                      \
+                                                                                        \
+      This makes the hardware enforce separation between the single main stack          \
+      (used for running the scheduler + handling interrupts) and the tasks'             \
+      stacks.                                                                           \
+                                                                                        \
+      This scheme is mainly important for interrupt handling: if an interrupt occurs    \
+      while a task is running, it'll execute using the main stack, *not the task's      \
+      stack*. This is important because the task's stack size can be much smaller       \
+      than certain interrupt handlers require. (For example, the STM32 USB interrupt    \
+      handlers need lots of stack space.) */                                            \
+    asm volatile("mrs r1, CONTROL");  /* Load CONTROL register into r1 */               \
+    asm volatile("eor.w	r1, r1, #2"); /* Toggle SPSEL bit */                            \
+    asm volatile("msr CONTROL, r1");  /* Store CONTROL register into r1 */              \
+    /* "When changing the stack pointer, software must use an ISB instruction           \
+        immediately after the MSR instruction. This ensures that instructions after     \
+        the ISB instruction execute using the new stack pointer" */                     \
+    asm volatile("isb");                                                                \
+                                                                                        \
+    asm volatile("ldr sp, %0" : : "m" (sp) : );                         /* (3) */       \
+    asm volatile("str r0, %0" : "=m" (sp) : : );                        /* (4) */       \
+    if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \
+        asm volatile("b %0" : : "i" (initFn) : );                       /* (5) */       \
+    } else {                                                                            \
+        asm volatile("pop {r4-r11,lr}" : : : );                         /* (6) */       \
+        asm volatile("bx lr" : : : );                                   /* (7) */       \
+    }
+    
+#else
+    
+    #error Task: Unsupported architecture
+    
+#endif
+
+// MARK: - Scheduler
 
 using TaskFn = void(*)();
 
@@ -54,7 +147,6 @@ struct TaskOptions {
 
 template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
-    void T_SetInterruptsEnabled(bool),  // T_SetInterruptsEnabled: function to change interrupt state
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
     void T_Error(uint16_t),             // T_Error: function to call upon an unrecoverable error (eg stack overflow)
     auto T_MainStack,                   // T_MainStack: main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
@@ -106,10 +198,11 @@ public:
                 _DidWork = false;
                 
                 for (_Task& task : _Tasks) {
-                    // Disable interrupts
-                    // This balances enabling interrupts in _TaskStartWork(), which may or may not have been called.
-                    // Regardless, when returning to the scheduler, interrupts need to be disabled.
-                    T_SetInterruptsEnabled(false);
+                    // Disable ints before entering a task.
+                    // We're not using an IntState here because we don't want the IntState dtor
+                    // cleanup behavior when exiting our scope; we want to keep ints disabled
+                    // across tasks.
+                    IntState::Set(false);
                     
                     _CurrentTask = &task;
                     task.cont();
@@ -123,23 +216,26 @@ public:
             } while (_DidWork);
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
-            // _ISR.Wake=true while interrupts were disabled during the entire process.
-            // (If interrupts were enabled, it's because we entered a task, and therefore
+            // _ISR.Wake=true while ints were disabled during the entire process.
+            // (If ints were enabled, it's because we entered a task, and therefore
             // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
-            // were entered -> interrupts are still disabled.)
+            // were entered -> ints are still disabled.)
             _ISR.Wake = false;
             
             // No work to do
             // Go to sleep!
             T_Sleep();
             
-            // Allow interrupts to fire
-            T_SetInterruptsEnabled(true);
+            // Allow ints to fire
+            IntState::Set(true);
         }
     }
     
     // Yield(): yield current task to the scheduler
     static void Yield() {
+        // IntState:
+        //   - int state must be restored upon return because scheduler clobbers it
+        IntState ints;
         // Return to scheduler
         _TaskSwap();
         // Return to task
@@ -150,11 +246,14 @@ public:
     // `fn` must not cause any task to become runnable.
     // If it does, the scheduler may not notice that the task is runnable and
     // could go to sleep instead of running the task.
-    // Interrupts are disabled while calling `fn`
+    // Ints are disabled while calling `fn`
     template <typename T_Fn>
     static auto Wait(T_Fn&& fn) {
-        // Ints must be disabled when calling `fn`
-        T_SetInterruptsEnabled(false);
+        // IntState:
+        //   - ints must be disabled when calling `fn`
+        //   - int state must be restored upon return because scheduler clobbers it
+        IntState ints(false);
+        
         for (;;) {
             const auto r = fn();
             if (!r) {
@@ -171,12 +270,14 @@ public:
     // `fn` must not cause any task to become runnable.
     // If it does, the scheduler may not notice that the task is runnable and
     // could go to sleep instead of running the task.
-    // Interrupts are disabled while calling `fn`
+    // Ints are disabled while calling `fn`
     template <typename T_Fn>
     static auto Wait(Ticks ticks, T_Fn&& fn) {
-        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime,
-        // and also because _WaitUntil() requires ints to be disabled.
-        T_SetInterruptsEnabled(false);
+        // IntState:
+        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
+        //   - ints must be disabled because _WaitUntil() requires it
+        //   - int state must be restored upon return because scheduler clobbers it
+        IntState ints(false);
         const Deadline deadline = _ISR.CurrentTime+ticks+1;
         return _WaitUntil(deadline, std::forward<T_Fn>(fn));
     }
@@ -185,7 +286,7 @@ public:
     // `fn` must not cause any task to become runnable.
     // If it does, the scheduler may not notice that the task is runnable and
     // could go to sleep instead of running the task.
-    // Interrupts are disabled while calling `fn`
+    // Ints are disabled while calling `fn`
     //
     // For a deadline to be considered in the past, it must be in the range:
     //   [CurrentTime - TicksMax/2, CurrentTime]
@@ -197,9 +298,11 @@ public:
     // See relevent comment in function body.
     template <typename T_Fn>
     static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
-        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime,
-        // and also because _WaitUntil() requires ints to be disabled.
-        T_SetInterruptsEnabled(false);
+        // IntState:
+        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
+        //   - ints must be disabled because _WaitUntil() requires it
+        //   - int state must be restored upon return because scheduler clobbers it
+        IntState ints(false);
         
         // Test whether `deadline` has already passed.
         //
@@ -218,9 +321,8 @@ public:
         // For a deadline to be considered in the future, it must be in the range:
         //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
         //
-        // Now that interrupts are disabled (and therefore _ISR.CurrentTime is
-        // unchanging), we can employ the above heuristic to determine whether `deadline`
-        // has already passed.
+        // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
+        // can employ the above heuristic to determine whether `deadline` has already passed.
         constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
         if (_ISR.CurrentTime-deadline <= TicksMax/2) {
             return std::optional<std::invoke_result_t<T_Fn>>{};
@@ -239,9 +341,10 @@ public:
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
-        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-        // Note that _TaskSwap() (called below) returns with ints disabled as well.
-        T_SetInterruptsEnabled(false);
+        // IntState:
+        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR
+        //   - int state must be restored upon return because scheduler clobbers it
+        IntState ints(false);
         
         const Deadline deadline = _ISR.CurrentTime+ticks+1;
         do {
@@ -288,8 +391,9 @@ public:
     }
     
     static Ticks CurrentTime() {
-        // Ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.
-        T_SetInterruptsEnabled(false);
+        // IntState:
+        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
+        IntState ints(false);
         return _ISR.CurrentTime;
     }
     
@@ -322,11 +426,14 @@ private:
     
     static void _TaskStartWork() {
         _DidWork = true;
-        // Enable interrupts
-        T_SetInterruptsEnabled(true);
     }
     
-    static void _TaskStart() {
+    static void _TaskRun() {
+        // Enable ints when initially entering a task.
+        // We're not using an IntState here because this function never actually returns (since
+        // we call _TaskSwap() at the end to return to the scheduler) and therefore we don't
+        // need IntState's dtor cleanup behavior.
+        IntState::Set(true);
         // Future invocations should invoke _TaskSwap
         _CurrentTask->cont = _TaskSwap;
         // Signal that we did work
@@ -340,18 +447,17 @@ private:
         _TaskSwap();
     }
     
-    // _TaskSwapInit(): swap task in and jump to _TaskStart
-    // Interrupts must be disabled when calling
+    // _TaskSwapInit(): swap task in and jump to _TaskRun
+    // Ints must be disabled
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskSwap(_TaskStart, _CurrentTask->sp);
+        TaskSwap(_TaskRun, _CurrentTask->sp);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
-    // Interrupts must be disabled when calling
+    // Ints must be disabled
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        // ## Architecture = ARM32, large memory model
         TaskSwap(nullptr, _CurrentTask->sp);
     }
     
@@ -369,7 +475,7 @@ private:
     
     // _ProposeWakeDeadline(): update _ISR.WakeDeadline with a new deadline,
     // if it occurs before the existing deadline.
-    // Interrupts must be disabled when calling
+    // Ints must be disabled
     static void _ProposeWakeDeadline(Deadline deadline) {
         const Ticks wakeDelay = deadline-_ISR.CurrentTime;
         const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
@@ -379,8 +485,7 @@ private:
     }
     
     // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-    // Interrupts must be disabled when calling
-    // Interrupts are enabled upon return
+    // Ints must be disabled
     template <typename T_Fn>
     static auto _WaitUntil(Deadline deadline, T_Fn&& fn) {
         do {
@@ -440,7 +545,7 @@ public:
         Ticks CurrentTime = 0;
         Deadline WakeDeadline = 0;
         bool Wake = false;
-        std::atomic<bool> Delay = false; // Atomic because we assign without disabling interrupts
+        std::atomic<bool> Delay = false; // Atomic because we assign without disabling ints
     } _ISR;
 #undef Assert
 };
