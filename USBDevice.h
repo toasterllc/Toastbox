@@ -241,14 +241,17 @@ public:
                 IOReturn ior = iface.iokitExec<&IOUSBInterfaceInterface::GetNumEndpoints>(&epCount);
                 _CheckErr(ior, "GetNumEndpoints failed");
                 
-                for (uint8_t pipeRef=1; pipeRef<=epCount; pipeRef++) {
+                for (uint8_t pipeRef=0; pipeRef<=epCount; pipeRef++) {
                     IOUSBEndpointProperties props = { .bVersion = kUSBEndpointPropertiesVersion3 };
                     ior = iface.iokitExec<&IOUSBInterfaceInterface::GetPipePropertiesV3>(pipeRef, &props);
                     _CheckErr(ior, "GetPipePropertiesV3 failed");
                     
-                    const bool dirOut = props.bDirection==kUSBOut;
+                    const bool dirOut = props.bDirection==kUSBOut || props.bDirection==kUSBAnyDirn;
                     const uint8_t epAddr = (dirOut ? USB::Endpoint::DirectionOut : USB::Endpoint::DirectionIn)|props.bEndpointNumber;
-                    _epInfos[_OffsetForEndpointAddr(epAddr)] = {
+                    auto& epInfo = _epInfos[_IdxForEndpointAddr(epAddr)];
+                    // Continue if _epInfos already has an entry for this epAddr
+                    if (epInfo.valid) continue;
+                    epInfo = {
                         .valid          = true,
                         .epAddr         = epAddr,
                         .ifaceIdx       = (uint8_t)(_interfaces.size()-1),
@@ -353,16 +356,20 @@ public:
     
     template <typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
-        if (USB::Endpoint::Idx(epAddr) == USB::Endpoint::Idx(USB::Endpoint::Default)) {
-            _openIfNeeded();
-            IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceAbortPipeZero>();
-            _CheckErr(ior, "USBDeviceAbortPipeZero failed");
+        const _EndpointInfo& epInfo = _epInfo(epAddr);
+        _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
+        iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
         
-        } else {
-            const _EndpointInfo& epInfo = _epInfo(epAddr);
-            _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-            iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
-        }
+//        if (USB::Endpoint::Idx(epAddr) == USB::Endpoint::Idx(USB::Endpoint::Default)) {
+//            _openIfNeeded();
+//            IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceAbortPipeZero>();
+//            _CheckErr(ior, "USBDeviceAbortPipeZero failed");
+//        
+//        } else {
+//            const _EndpointInfo& epInfo = _epInfo(epAddr);
+//            _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
+//            iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
+//        }
     }
     
     template <typename T>
@@ -395,7 +402,7 @@ private:
         uint16_t maxPacketSize = 0;
     };
     
-    static uint8_t _OffsetForEndpointAddr(uint8_t epAddr) {
+    static uint8_t _IdxForEndpointAddr(uint8_t epAddr) {
         return ((epAddr&USB::Endpoint::DirectionMask)>>3) | (epAddr&USB::Endpoint::IndexMask);
     }
     
@@ -404,29 +411,29 @@ private:
     }
     
     const _EndpointInfo& _epInfo(uint8_t epAddr) const {
-        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        const _EndpointInfo& epInfo = _epInfos[_IdxForEndpointAddr(epAddr)];
         if (!epInfo.valid) throw RuntimeError("invalid endpoint address: 0x%02x", epAddr);
         return epInfo;
     }
     
 //    _Interface& _interfaceForEndpointAddr(uint8_t epAddr) {
-//        const uint8_t ifaceIdx = _ifaceIdxFromEp[_OffsetForEndpointAddr(epAddr)];
+//        const uint8_t ifaceIdx = _ifaceIdxFromEp[_IdxForEndpointAddr(epAddr)];
 //        return _interfaces.at(ifaceIdx);
 //    }
 //    
-    void _openIfNeeded() {
-        if (_open) return;
-        // Open the device
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
-        _CheckErr(ior, "USBDeviceOpen failed");
-        _open = true;
-    }
+//    void _openIfNeeded() {
+//        if (_open) return;
+//        // Open the device
+//        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
+//        _CheckErr(ior, "USBDeviceOpen failed");
+//        _open = true;
+//    }
     
     SendRight _service;
     _IOUSBDeviceInterface _iokitInterface;
     std::vector<_Interface> _interfaces;
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount];
-    bool _open = false;
+//    bool _open = false;
     
 #elif __linux__
     
@@ -465,7 +472,7 @@ private:
                 for (uint8_t epIdx=0; epIdx<ifaceDesc.bNumEndpoints; epIdx++) {
                     const struct libusb_endpoint_descriptor& endpointDesc = ifaceDesc.endpoint[epIdx];
                     const uint8_t epAddr = endpointDesc.bEndpointAddress;
-                    _epInfos[_OffsetForEndpointAddr(epAddr)] = _EndpointInfo{
+                    _epInfos[_IdxForEndpointAddr(epAddr)] = _EndpointInfo{
                         .valid          = true,
                         .epAddr         = epAddr,
                         .ifaceIdx       = ifaceIdx,
@@ -607,7 +614,7 @@ private:
         return Ctx;
     }
     
-    static uint8_t _OffsetForEndpointAddr(uint8_t epAddr) {
+    static uint8_t _IdxForEndpointAddr(uint8_t epAddr) {
         return ((epAddr&USB::Endpoint::DirectionMask)>>3) | (epAddr&USB::Endpoint::IndexMask);
     }
     
@@ -641,7 +648,7 @@ private:
     }
     
     const _EndpointInfo& _epInfo(uint8_t epAddr) const {
-        const _EndpointInfo& epInfo = _epInfos[_OffsetForEndpointAddr(epAddr)];
+        const _EndpointInfo& epInfo = _epInfos[_IdxForEndpointAddr(epAddr)];
         if (!epInfo.valid) throw RuntimeError("invalid endpoint address: 0x%02x", epAddr);
         return epInfo;
     }
