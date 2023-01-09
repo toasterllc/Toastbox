@@ -370,8 +370,8 @@ public:
                 .bRequest           = USB::Request::GetStatus,
                 .wValue             = 0,
                 .wIndex             = 0,
-                .wLength            = sizeof(data),
-                .pData              = data,
+                .wLength            = sizeof(status),
+                .pData              = status,
                 .wLenDone           = 0,
             };
             
