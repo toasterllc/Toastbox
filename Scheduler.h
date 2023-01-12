@@ -2,7 +2,6 @@
 #include <type_traits>
 #include <cstdint>
 #include <cstdlib>
-#include <atomic>
 #include <optional>
 
 namespace Toastbox {
@@ -363,25 +362,26 @@ public:
         _TaskStartWork();
     }
     
-    // Delay(ticks): delay current task for `ticks`, without allowing other tasks to run
-    static void Delay(Ticks ticks) {
-        _ISR.Delay = true;
-        for (Ticks i=0;; i++) {
-            T_Sleep();
-            // Check break condition here so that:
-            //   1. we sleep ticks+1 times, and
-            //   2. ticks == ~0 works properly
-            if (i == ticks) break;
-        }
-        _ISR.Delay = false;
-    }
+    // TODO: revisit -- this implementation is wrong because `T_Sleep()` will return upon any interrupt, not just our tick interrupt, so a tick won't necessarily have passed
+//    // Delay(ticks): delay current task for `ticks`, without allowing other tasks to run
+//    static void Delay(Ticks ticks) {
+//        _ISR.Delay = true;
+//        for (Ticks i=0;; i++) {
+//            T_Sleep();
+//            // Check break condition here so that:
+//            //   1. we sleep ticks+1 times, and
+//            //   2. ticks == ~0 works properly
+//            if (i == ticks) break;
+//        }
+//        _ISR.Delay = false;
+//    }
     
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
         // Don't increment time if there's an existing _ISR.Wake signal that hasn't been consumed.
         // This is necessary so that we don't miss any ticks, which could cause a task wakeup to be missed.
-        if (_ISR.Wake || _ISR.Delay) return true;
+        if (_ISR.Wake) return true;
         
         _ISR.CurrentTime++;
         if (_ISR.CurrentTime == _ISR.WakeDeadline) {
@@ -547,7 +547,6 @@ public:
         Ticks CurrentTime = 0;
         Deadline WakeDeadline = 0;
         bool Wake = false;
-        std::atomic<bool> Delay = false; // Atomic because we assign without disabling ints
     } _ISR;
 #undef Assert
 };
