@@ -154,9 +154,37 @@ template <
 >
 class Scheduler {
 #define Assert(x) if (!(x)) T_Error(__LINE__)
+private:
+    struct _Task;
+    
 public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
+    
+    // MARK: - Channel
+    
+    template <typename T_Type, size_t T_Cap=0>
+    class Channel {
+    public:
+        using Type = T_Type;
+        static constexpr size_t Cap = T_Cap;
+        
+    private:
+        
+    //    void _push(const T_Type& x) {
+    //        _q[_w] = x;
+    //        _w++;
+    //        if (_w == T_Cap) _w = 0;
+    //        if (_w == _r) _full = true;
+    //    }
+        
+        T_Type _q[std::max((size_t)1, T_Cap)];
+        size_t _w = 0;
+        size_t _r = 0;
+        bool _full = false;
+        _Task* _wwaiter = nullptr;
+        _Task* _rwaiter = nullptr;
+    };
     
     // Start<task,fn>(): starts `task` running with `fn`
     template <typename T_Task, typename T_Fn>
@@ -337,6 +365,53 @@ public:
         Wait([] { return (!Running<T_Tsks>() && ...); });
     }
     
+    
+    
+    
+    
+    // Unbuffered send
+    template <
+    typename T,
+    size_t _T_Cap = T::Cap,
+    typename std::enable_if_t<_T_Cap==0, int> = 0
+    >
+    static void Send(T& chan, const typename T::Type& val) {
+        
+    }
+    
+    // Buffered send
+    template <
+    typename T,
+    size_t _T_Cap = T::Cap,
+    typename std::enable_if_t<_T_Cap!=0, int> = 0
+    >
+    static void Send(T& chan, const typename T::Type& val) {
+        IntState ints(false);
+        
+        // Wait until channel isn't full
+        if (chan._full) {
+            // Remember previous waiter
+            _Task* wwaiterPrev = chan.wwaiter;
+            chan.wwaiter = _CurrentTask;
+            // Go to sleep until the channel wakes us
+            _TaskSleep();
+            // Restore previous waiter
+            chan.wwaiter = wwaiterPrev;
+        }
+        
+        // Add the value to the channel's queue
+        chan._q[chan._w] = val;
+        chan._w++;
+        if (chan._w == T::Cap) _w = 0;
+        if (chan._w == chan._r) chan._full = true;
+        
+        // If there's a read waiter, wake it up
+        _Task* rwaiter = chan.rwaiter;
+        if (rwaiter) {
+            _TaskWake(rwaiter);
+        }
+    }
+    
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
     static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
     
@@ -409,6 +484,9 @@ private:
         TaskFn run = nullptr;
         TaskFn cont = nullptr;
         void* sp = nullptr;
+//        bool runnable = false;
+//        _Task* prev = nullptr;
+        _Task* next = nullptr;
         _StackGuard& stackGuard;
     };
     
@@ -424,6 +502,46 @@ private:
         for (const uintptr_t& x : guard) {
             Assert(x == _StackGuardMagicNumber);
         }
+    }
+    
+    // _TaskSleep(): mark current task as sleeping and return to scheduler
+    static void _TaskSleep() {
+        // Remove current task from list
+        *_TaskCurrPtr = _TaskCurr->next;
+        // Return to scheduler
+        _TaskSwap();
+        
+//        #warning TODO: remove assert after debugging
+//        Assert(_CurrentTask->runnable);
+//        _CurrentTask->runnable = false;
+//        
+//        _CurrentTask->prev->next = _CurrentTask->next;
+//        
+//        if (_CurrentTask->prev) {
+//            _CurrentTask->prev->next = 
+//        } else {
+//            _CurrentTask->prev
+//        }
+//        
+//        _Task*& taskPrevPtr = 
+//        
+//        if ()
+//        
+//        _CurrentTask->next = 
+//        
+//        _CurrentTask->next = 
+//        
+//        _Runnable = _CurrentTask;
+    }
+    
+    // _TaskWake: insert the given task into the runnable list
+    static void _TaskWake(_Task* task) {
+        // Insert task into the runnable list
+        task->next = _TasksRunnable;
+        _TasksRunnable = task;
+        
+//        #warning TODO: remove assert after debugging
+//        Assert(!_CurrentTask->runnable);
     }
     
     static void _TaskStartWork() {
@@ -540,8 +658,15 @@ public:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-    static inline bool _DidWork = false;
-    static inline _Task* _CurrentTask = nullptr;
+//    using _TaskList = std::list<_Task*>;
+//    static inline bool _DidWork = false;
+//    static inline _Task* _CurrentTask = nullptr;
+//    _TaskList _RunnableTasks;
+//    _TaskList::iterator _CurrentTask;
+    
+    static inline _Task* _TasksRunnable = nullptr;
+    static inline _Task* _TaskCurr = nullptr;
+    static inline _Task** _TaskCurrPtr = &_TaskCurr;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
