@@ -376,7 +376,38 @@ public:
     typename std::enable_if_t<_T_Cap==0, int> = 0
     >
     static void Send(T& chan, const typename T::Type& val) {
+        IntState ints(false);
         
+        for (;;) {
+            // If a reader is already waiting, set the value and wake it
+            if (chan._rwaiter) {
+                chan._q[0] = val;
+                _TaskWake(chan._rwaiter);
+                return;
+            }
+            
+            // Otherwise, there's no reader waiting
+            
+            // If a writer doesn't already exist, make ourself the writer and wait for the reader to wake us.
+            if (!chan._wwaiter) {
+                chan._q[0] = val;
+                chan._wwaiter = _TaskCurr;
+                _TaskSleep();
+                chan._wwaiter = nullptr;
+                if (_TaskCurr->next) {
+                    _TaskWake(_TaskCurr->next);
+                }
+                return;
+            }
+            
+            // There's already a writer
+            // Put ourself at the front of the list of waiting writers, and go to sleep
+            _TaskCurr->next = chan._wwaiter->next;
+            chan._wwaiter->next = _TaskCurr;
+            _TaskSleep();
+            chan._wwaiter->next = _TaskCurr->next;
+            // Try again by continuing the loop
+        }
     }
     
     // Buffered send
@@ -388,15 +419,32 @@ public:
     static void Send(T& chan, const typename T::Type& val) {
         IntState ints(false);
         
+        if (!chan._full) {
+            // Add the value to the channel's queue
+            chan._q[chan._w] = val;
+            chan._w++;
+            if (chan._w == T::Cap) _w = 0;
+            if (chan._w == chan._r) chan._full = true;
+            
+            // If there's a read waiter, wake it up
+            _Task* rwaiter = chan.rwaiter;
+            if (chan.rwaiter) {
+                _TaskWake(rwaiter);
+            }
+        }
+        
         // Wait until channel isn't full
         if (chan._full) {
-            // Remember previous waiter
-            _Task* wwaiterPrev = chan.wwaiter;
-            chan.wwaiter = _CurrentTask;
-            // Go to sleep until the channel wakes us
-            _TaskSleep();
-            // Restore previous waiter
-            chan.wwaiter = wwaiterPrev;
+            
+            
+            
+//            // Remember previous waiter
+//            _Task* wwaiterPrev = chan.wwaiter;
+//            chan.wwaiter = _CurrentTask;
+//            // Go to sleep until the channel wakes us
+//            _TaskSleep();
+//            // Restore previous waiter
+//            chan.wwaiter = wwaiterPrev;
         }
         
         // Add the value to the channel's queue
