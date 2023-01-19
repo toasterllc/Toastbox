@@ -185,6 +185,7 @@ public:
         _Task* _writer = nullptr;
         _Task* _writerNext = nullptr;
         _Task* _reader = nullptr;
+        _Task* _readerNext = nullptr;
     };
     
     // Start<task,fn>(): starts `task` running with `fn`
@@ -378,7 +379,6 @@ public:
     >
     static void Send(T& chan, const typename T::Type& val) {
         IntState ints(false);
-        
         for (;;) {
             // If a reader is already waiting, set the value and wake it
             if (chan._reader) {
@@ -387,8 +387,7 @@ public:
                 return;
             }
             
-            // Otherwise, there's no reader waiting
-            
+            // Otherwise, there's no reader waiting.
             // If a writer doesn't already exist, make ourself the writer and wait for the reader to wake us.
             if (!chan._writer) {
                 chan._q[0] = val;
@@ -407,20 +406,42 @@ public:
             chan._writerNext = _TaskCurr;
             _TaskSleep();
             chan._writerNext = writerNext;
+        }
+    }
+    
+    // Unbuffered receive
+    template <
+    typename T,
+    size_t _T_Cap = T::Cap,
+    typename std::enable_if_t<_T_Cap==0, int> = 0
+    >
+    static typename T::Type Recv(T& chan) {
+        IntState ints(false);
+        for (;;) {
+            // If a writer is already waiting, get the value and wake it
+            if (chan._writer) {
+                _TaskWake(chan._writer);
+                return chan._q[0];
+            }
             
-//            
-//            
-//            if (chan._writerNext == ) {
-//                
-//            }
-//            
-//            
-//            // Put ourself at the front of the list of waiting writers, and go to sleep
-//            _TaskCurr->next = chan._wwaiter->next;
-//            chan._wwaiter->next = _TaskCurr;
-//            _TaskSleep();
-//            chan._wwaiter->next = _TaskCurr->next;
-//            // Try again by continuing the loop
+            // Otherwise, there's no writer waiting.
+            // If a reader doesn't already exist, make ourself the reader and wait for the writer to wake us.
+            if (!chan._reader) {
+                chan._reader = _TaskCurr;
+                _TaskSleep();
+                chan._reader = nullptr;
+                if (chan._readerNext) {
+                    _TaskWake(chan._readerNext);
+                }
+                return;
+            }
+            
+            // There's already a reader
+            // Steal the chan._readerNext slot, and restore it when someone wakes us
+            _Task* readerNext = chan._readerNext;
+            chan._readerNext = _TaskCurr;
+            _TaskSleep();
+            chan._readerNext = readerNext;
         }
     }
     
@@ -432,10 +453,9 @@ public:
     >
     static void Send(T& chan, const typename T::Type& val) {
         IntState ints(false);
-        
         for (;;) {
+            // If the channel has an available slot, add the value to the queue
             if (!chan._full) {
-                // Add the value to the channel's queue
                 chan._q[chan._w] = val;
                 chan._w++;
                 if (chan._w == T::Cap) _w = 0;
@@ -454,33 +474,47 @@ public:
             _TaskSleep();
             chan._writer = writerPrev;
         }
-        
-//        // Wait until channel isn't full
-//        if (chan._full) {
-//            
-//            
-//            
-////            // Remember previous waiter
-////            _Task* wwaiterPrev = chan.wwaiter;
-////            chan.wwaiter = _CurrentTask;
-////            // Go to sleep until the channel wakes us
-////            _TaskSleep();
-////            // Restore previous waiter
-////            chan.wwaiter = wwaiterPrev;
-//        }
-//        
-//        // Add the value to the channel's queue
-//        chan._q[chan._w] = val;
-//        chan._w++;
-//        if (chan._w == T::Cap) _w = 0;
-//        if (chan._w == chan._r) chan._full = true;
-//        
-//        // If there's a read waiter, wake it up
-//        _Task* rwaiter = chan.rwaiter;
-//        if (rwaiter) {
-//            _TaskWake(rwaiter);
-//        }
     }
+    
+    // Buffered receive
+    template <
+    typename T,
+    size_t _T_Cap = T::Cap,
+    typename std::enable_if_t<_T_Cap!=0, int> = 0
+    >
+    static typename T::Type Recv(T& chan) {
+        IntState ints(false);
+        for (;;) {
+            // If the channel has available data, pop the value from the queue
+            if (chan._w!=chan._r || chan._full) {
+                const T::Type& val = chan._q[chan._r];
+                chan._r++;
+                if (chan._r == T::Cap) chan._r = 0;
+                chan._full = false;
+                
+                // If there's a writer, wake it
+                if (chan._writer) {
+                    _TaskWake(chan._writer);
+                }
+                return val;
+            }
+            
+            // Steal the chan._reader slot, and restore it when someone wakes us
+            _Task* readerPrev = chan._reader;
+            chan._reader = _TaskCurr;
+            _TaskSleep();
+            chan._reader = readerPrev;
+        }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
     static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
