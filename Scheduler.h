@@ -223,26 +223,28 @@ public:
         }
         
         for (;;) {
-            do {
-                _DidWork = false;
+            while (_TasksRunnable) {
+                _TaskCurr = _TasksRunnable;
+                _TaskCurrPtr = &_TasksRunnable;
                 
-                for (_Task& task : _Tasks) {
+                do {
                     // Disable ints before entering a task.
                     // We're not using an IntState here because we don't want the IntState dtor
                     // cleanup behavior when exiting our scope; we want to keep ints disabled
                     // across tasks.
                     IntState::Set(false);
-                    
-                    _CurrentTask = &task;
-                    task.cont();
+                    _TaskCurr->cont();
                     
                     // Check stack guards
                     if constexpr (T_StackGuardCount) {
                         _StackGuardCheck(_MainStackGuard);
-                        _StackGuardCheck(task.stackGuard);
+                        _StackGuardCheck(_TaskCurr->stackGuard);
                     }
-                }
-            } while (_DidWork);
+                    
+                    _TaskCurr = _TaskCurr->next;
+                    _TaskCurrPtr = &_TaskCurr->next;
+                } while (_TaskCurr);
+            }
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
             // _ISR.Wake=true while ints were disabled during the entire process.
@@ -588,9 +590,11 @@ private:
         TaskFn run = nullptr;
         TaskFn cont = nullptr;
         void* sp = nullptr;
+        _Task* next = nullptr;
+//        _Task* prev = nullptr;
 //        bool runnable = false;
 //        _Task* prev = nullptr;
-        _Task* next = nullptr;
+//        _Task* next = nullptr;
         _StackGuard& stackGuard;
     };
     
@@ -610,7 +614,7 @@ private:
     
     // _TaskSleep(): mark current task as sleeping and return to scheduler
     static void _TaskSleep() {
-        // Remove current task from list
+        // Remove current task from linked list of runnable tasks
         *_TaskCurrPtr = _TaskCurr->next;
         // Return to scheduler
         _TaskSwap();
