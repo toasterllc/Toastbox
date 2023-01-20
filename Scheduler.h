@@ -233,6 +233,11 @@ public:
                     // cleanup behavior when exiting our scope; we want to keep ints disabled
                     // across tasks.
                     IntState::Set(false);
+                    
+                    *_TaskCurrPtr = _TaskCurr;
+                    
+//                    _TaskNext = _TaskCurr;
+                    _TaskCurrSleep = false;
                     _TaskCurr->cont();
                     
                     // Check stack guards
@@ -241,9 +246,19 @@ public:
                         _StackGuardCheck(_TaskCurr->stackGuard);
                     }
                     
+                    if (!_TaskCurrSleep) {
+                        _TaskCurrPtr = &_TaskCurr->next;
+                    }
+                    
                     _TaskCurr = _TaskCurr->next;
-                    _TaskCurrPtr = &_TaskCurr->next;
+                    
+//                    _TaskCurrPtr = &_TaskCurr->next;
+//                    _TaskCurrPtr = &((*_TaskCurrPtr)->next);
+//                    _TaskCurrPtr = &_TaskCurr->next;
                 } while (_TaskCurr);
+                
+                // End of task list
+                *_TaskCurrPtr = nullptr;
             }
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
@@ -615,7 +630,9 @@ private:
     // _TaskSleep(): mark current task as sleeping and return to scheduler
     static void _TaskSleep() {
         // Remove current task from linked list of runnable tasks
-        *_TaskCurrPtr = _TaskCurr->next;
+//        *_TaskCurrPtr = _TaskCurr->next;
+//        _TaskNext = _TaskCurr->next;
+        _TaskCurrSleep = true;
         // Return to scheduler
         _TaskSwap();
         
@@ -774,7 +791,9 @@ public:
     
     static inline _Task* _TasksRunnable = nullptr;
     static inline _Task* _TaskCurr = nullptr;
-    static inline _Task** _TaskCurrPtr = &_TaskCurr;
+    static inline bool _TaskCurrSleep = false;
+//    static inline _Task** _TaskCurrPtr = &_TaskCurr;
+    static inline _Task** _TaskNext = &_TaskCurr;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
