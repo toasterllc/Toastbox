@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
+#include <algorithm>
 
 namespace Toastbox {
 
@@ -47,7 +48,7 @@ private:
 
 // MARK: - TaskSwap
 
-// TaskSwap(): architecture-specific macro that swaps the current task
+// _SchedulerTaskSwap(): architecture-specific macro that swaps the current task
 // with a different task. Steps:
 //
 // (1) Push callee-saved regs onto stack, including $PC if needed
@@ -60,9 +61,9 @@ private:
 //   (6) Pop callee-saved registers from stack
 //   (7) Return to caller
 
-#if defined(TaskMSP430)
+#if defined(SchedulerMSP430)
 
-#define TaskSwap(initFn, sp)                                                            \
+#define _SchedulerTaskSwap(initFn, sp)                                                  \
                                                                                         \
     if constexpr (sizeof(void*) == 2) {                                                 \
         /* ## Architecture = MSP430, small memory model */                              \
@@ -90,9 +91,9 @@ private:
         }                                                                               \
     }
 
-#elif defined(TaskARM32)
+#elif defined(SchedulerARM32)
 
-#define TaskSwap(initFn, sp)                                                            \
+#define _SchedulerTaskSwap(initFn, sp)                                                  \
                                                                                         \
     /* ## Architecture = ARM32 */                                                       \
     asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
@@ -129,6 +130,12 @@ private:
         asm volatile("pop {r4-r11,lr}" : : : );                         /* (6) */       \
         asm volatile("bx lr" : : : );                                   /* (7) */       \
     }
+    
+#elif defined(SchedulerAMD64)
+    
+#define _SchedulerTaskSwap(initFn, sp)                                                  \
+                                                                                        \
+    /* ## Architecture = AMD64 */                                                       \
     
 #else
     
@@ -462,7 +469,7 @@ public:
             if (!chan._full) {
                 chan._q[chan._w] = val;
                 chan._w++;
-                if (chan._w == T::Cap) _w = 0;
+                if (chan._w == T::Cap) chan._w = 0;
                 if (chan._w == chan._r) chan._full = true;
                 
                 // If there's a reader, wake it
@@ -491,7 +498,7 @@ public:
         for (;;) {
             // If the channel has available data, pop the value from the queue
             if (chan._w!=chan._r || chan._full) {
-                const T::Type& val = chan._q[chan._r];
+                const typename T::Type& val = chan._q[chan._r];
                 chan._r++;
                 if (chan._r == T::Cap) chan._r = 0;
                 chan._full = false;
@@ -613,7 +620,7 @@ private:
     // _TaskSleep(): mark current task as sleeping and return to scheduler
     static void _TaskSleep() {
         // Notify scheduler that this task should sleep
-        _TaskCurrSleep = true;
+        _TaskCurrRunnable = true;
         // Return to scheduler
         _TaskSwap();
     }
@@ -626,7 +633,6 @@ private:
     }
     
     static void _TaskStartWork() {
-        _DidWork = true;
     }
     
     static void _TaskRun() {
@@ -636,14 +642,14 @@ private:
         // need IntState's dtor cleanup behavior.
         IntState::Set(true);
         // Future invocations should invoke _TaskSwap
-        _CurrentTask->cont = _TaskSwap;
+        _TaskCurr->cont = _TaskSwap;
         // Signal that we did work
         _TaskStartWork();
         // Invoke task function
-        _CurrentTask->run();
+        _TaskCurr->run();
         // The task finished
         // Future invocations should do nothing
-        _CurrentTask->cont = _TaskNop;
+        _TaskCurr->cont = _TaskNop;
         // Return to scheduler
         _TaskSwap();
     }
@@ -652,14 +658,14 @@ private:
     // Ints must be disabled
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwapInit() {
-        TaskSwap(_TaskRun, _CurrentTask->sp);
+        _SchedulerTaskSwap(_TaskRun, _TaskCurr->sp);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
     // Ints must be disabled
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        TaskSwap(nullptr, _CurrentTask->sp);
+        _SchedulerTaskSwap(nullptr, _TaskCurr->sp);
     }
     
     static void _TaskNop() {
@@ -720,8 +726,6 @@ private:
         return std::is_same_v<T_1,T_2> ? 0 : 1 + _ElmIdx<T_1, T_s...>();
     }
     
-#warning TODO: remove public after finished debugging
-public:
     template <TaskFn T_Fn, TaskFn T_A, TaskFn T_B>
     struct _FnConditional { static constexpr TaskFn Fn = T_A; };
     template <TaskFn T_A, TaskFn T_B>
