@@ -171,13 +171,6 @@ public:
         
     private:
         
-    //    void _push(const T_Type& x) {
-    //        _q[_w] = x;
-    //        _w++;
-    //        if (_w == T_Cap) _w = 0;
-    //        if (_w == _r) _full = true;
-    //    }
-        
         T_Type _q[std::max((size_t)1, T_Cap)];
         size_t _w = 0;
         size_t _r = 0;
@@ -225,7 +218,7 @@ public:
         for (;;) {
             while (_TasksRunnable) {
                 _TaskCurr = _TasksRunnable;
-                _TaskCurrPtr = &_TasksRunnable;
+                _Task** tasksRunnable = &_TasksRunnable;
                 
                 do {
                     // Disable ints before entering a task.
@@ -234,9 +227,8 @@ public:
                     // across tasks.
                     IntState::Set(false);
                     
-                    *_TaskCurrPtr = _TaskCurr;
+                    *tasksRunnable = _TaskCurr;
                     
-//                    _TaskNext = _TaskCurr;
                     _TaskCurrSleep = false;
                     _TaskCurr->cont();
                     
@@ -247,18 +239,14 @@ public:
                     }
                     
                     if (!_TaskCurrSleep) {
-                        _TaskCurrPtr = &_TaskCurr->next;
+                        tasksRunnable = &_TaskCurr->next;
                     }
                     
                     _TaskCurr = _TaskCurr->next;
-                    
-//                    _TaskCurrPtr = &_TaskCurr->next;
-//                    _TaskCurrPtr = &((*_TaskCurrPtr)->next);
-//                    _TaskCurrPtr = &_TaskCurr->next;
                 } while (_TaskCurr);
                 
                 // End of task list
-                *_TaskCurrPtr = nullptr;
+                *tasksRunnable = nullptr;
             }
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
@@ -606,10 +594,6 @@ private:
         TaskFn cont = nullptr;
         void* sp = nullptr;
         _Task* next = nullptr;
-//        _Task* prev = nullptr;
-//        bool runnable = false;
-//        _Task* prev = nullptr;
-//        _Task* next = nullptr;
         _StackGuard& stackGuard;
     };
     
@@ -629,34 +613,10 @@ private:
     
     // _TaskSleep(): mark current task as sleeping and return to scheduler
     static void _TaskSleep() {
-        // Remove current task from linked list of runnable tasks
-//        *_TaskCurrPtr = _TaskCurr->next;
-//        _TaskNext = _TaskCurr->next;
+        // Notify scheduler that this task should sleep
         _TaskCurrSleep = true;
         // Return to scheduler
         _TaskSwap();
-        
-//        #warning TODO: remove assert after debugging
-//        Assert(_CurrentTask->runnable);
-//        _CurrentTask->runnable = false;
-//        
-//        _CurrentTask->prev->next = _CurrentTask->next;
-//        
-//        if (_CurrentTask->prev) {
-//            _CurrentTask->prev->next = 
-//        } else {
-//            _CurrentTask->prev
-//        }
-//        
-//        _Task*& taskPrevPtr = 
-//        
-//        if ()
-//        
-//        _CurrentTask->next = 
-//        
-//        _CurrentTask->next = 
-//        
-//        _Runnable = _CurrentTask;
     }
     
     // _TaskWake: insert the given task into the runnable list
@@ -664,9 +624,6 @@ private:
         // Insert task into the runnable list
         task->next = _TasksRunnable;
         _TasksRunnable = task;
-        
-//        #warning TODO: remove assert after debugging
-//        Assert(!_CurrentTask->runnable);
     }
     
     static void _TaskStartWork() {
@@ -783,17 +740,9 @@ public:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-//    using _TaskList = std::list<_Task*>;
-//    static inline bool _DidWork = false;
-//    static inline _Task* _CurrentTask = nullptr;
-//    _TaskList _RunnableTasks;
-//    _TaskList::iterator _CurrentTask;
-    
     static inline _Task* _TasksRunnable = nullptr;
     static inline _Task* _TaskCurr = nullptr;
     static inline bool _TaskCurrSleep = false;
-//    static inline _Task** _TaskCurrPtr = &_TaskCurr;
-    static inline _Task** _TaskNext = &_TaskCurr;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
