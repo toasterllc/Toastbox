@@ -228,8 +228,7 @@ public:
                     IntState::Set(false);
                     
                     *tasksRunnable = _TaskCurr;
-                    
-                    _TaskCurrSleep = false;
+                    _TaskCurrRunnable = true;
                     _TaskCurr->cont();
                     
                     // Check stack guards
@@ -238,7 +237,7 @@ public:
                         _StackGuardCheck(_TaskCurr->stackGuard);
                     }
                     
-                    if (!_TaskCurrSleep) {
+                    if (_TaskCurrRunnable) {
                         tasksRunnable = &_TaskCurr->next;
                     }
                     
@@ -742,7 +741,7 @@ public:
     
     static inline _Task* _TasksRunnable = nullptr;
     static inline _Task* _TaskCurr = nullptr;
-    static inline bool _TaskCurrSleep = false;
+    static inline bool _TaskCurrRunnable = false;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
