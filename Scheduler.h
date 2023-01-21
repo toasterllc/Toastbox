@@ -137,6 +137,26 @@ private:
 #define _SchedulerTaskSwap(initFn, sp)                                                  \
                                                                                         \
     /* ## Architecture = AMD64 */                                                       \
+    asm volatile("push %%rbx" : : : );                                  /* (1) */       \
+    asm volatile("push %%rbp" : : : );                                  /* (1) */       \
+    asm volatile("push %%r12" : : : );                                  /* (1) */       \
+    asm volatile("push %%r13" : : : );                                  /* (1) */       \
+    asm volatile("push %%r14" : : : );                                  /* (1) */       \
+    asm volatile("push %%r15" : : : );                                  /* (1) */       \
+    asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (2) */       \
+    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (3) */       \
+    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (4) */       \
+    if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \
+        asm volatile("jmp %0" : : "i" (initFn) : );                     /* (5) */       \
+    } else {                                                                            \
+        asm volatile("pop %%r15" : : : );                               /* (6) */       \
+        asm volatile("pop %%r14" : : : );                               /* (6) */       \
+        asm volatile("pop %%r13" : : : );                               /* (6) */       \
+        asm volatile("pop %%r12" : : : );                               /* (6) */       \
+        asm volatile("pop %%rbp" : : : );                               /* (6) */       \
+        asm volatile("pop %%rbx" : : : );                               /* (6) */       \
+        asm volatile("ret" : : : );                                     /* (7) */       \
+    }
     
 #else
     
