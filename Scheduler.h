@@ -52,12 +52,10 @@ private:
 // _SchedulerTaskSwap(): architecture-specific macro that swaps the current task
 // with a different task. Steps:
 //
-// (1) Push interrupt state
-// (2) Push callee-saved regs onto stack, including $PC if needed
-// (3) Swap $SP (stack pointer) and `sp` (macro argument)
-// (4) Pop callee-saved registers from stack
-// (5) Pop interrupt state
-// (6) Return to caller
+// (1) Push callee-saved regs onto stack (including $PC if needed for step #4 to work)
+// (2) Swap $SP (stack pointer) and `sp` (macro argument)
+// (3) Pop callee-saved registers from stack
+// (4) Return to caller
 
 #if defined(SchedulerMSP430)
 
@@ -135,23 +133,21 @@ private:
                                                                                         \
     /* ## Architecture = AMD64 */                                                       \
     asm volatile("push %%rbx" : : : );                                  /* (1) */       \
-    asm volatile("push %%rbx" : : : );                                  /* (2) */       \
-    asm volatile("push %%rbp" : : : );                                  /* (2) */       \
-    asm volatile("push %%r12" : : : );                                  /* (2) */       \
-    asm volatile("push %%r13" : : : );                                  /* (2) */       \
-    asm volatile("push %%r14" : : : );                                  /* (2) */       \
-    asm volatile("push %%r15" : : : );                                  /* (2) */       \
-    asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (3) */       \
-    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (3) */       \
-    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (3) */       \
-    asm volatile("pop %%r15" : : : );                                   /* (4) */       \
-    asm volatile("pop %%r14" : : : );                                   /* (4) */       \
-    asm volatile("pop %%r13" : : : );                                   /* (4) */       \
-    asm volatile("pop %%r12" : : : );                                   /* (4) */       \
-    asm volatile("pop %%rbp" : : : );                                   /* (4) */       \
-    asm volatile("pop %%rbx" : : : );                                   /* (4) */       \
-    asm volatile("pop %%rbx" : : : );                                   /* (5) */       \
-    asm volatile("ret" : : : );                                         /* (6) */       \
+    asm volatile("push %%rbp" : : : );                                  /* (1) */       \
+    asm volatile("push %%r12" : : : );                                  /* (1) */       \
+    asm volatile("push %%r13" : : : );                                  /* (1) */       \
+    asm volatile("push %%r14" : : : );                                  /* (1) */       \
+    asm volatile("push %%r15" : : : );                                  /* (1) */       \
+    asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (2) */       \
+    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (2) */       \
+    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (2) */       \
+    asm volatile("pop %%r15" : : : );                                   /* (3) */       \
+    asm volatile("pop %%r14" : : : );                                   /* (3) */       \
+    asm volatile("pop %%r13" : : : );                                   /* (3) */       \
+    asm volatile("pop %%r12" : : : );                                   /* (3) */       \
+    asm volatile("pop %%rbp" : : : );                                   /* (3) */       \
+    asm volatile("pop %%rbx" : : : );                                   /* (3) */       \
+    asm volatile("ret" : : : );                                         /* (4) */       \
     
 #else
     
@@ -235,12 +231,12 @@ public:
                 _StackGuardInit(task.stackGuard);
             }
             
-            void** sp = task.sp-2;
-            sp[0] = ;
-            sp[1] = task.run;
-            
-//            (void**)task.sp
+            _TaskFn* sp = (_TaskFn*)task.sp;
+            *(sp-1) = task.run;
         }
+        
+        // Enable interrupts
+        IntState::Set(true);
         
         for (;;) {
             while (_TasksRunnable) {
@@ -248,8 +244,6 @@ public:
                 _Task** tasksRunnable = &_TasksRunnable;
                 
                 do {
-                    IntState::Set(false);
-                    
                     *tasksRunnable = _TaskCurr;
                     _TaskCurrRunnable = true;
                     _TaskSwap();
@@ -282,21 +276,13 @@ public:
             // No work to do
             // Go to sleep!
             T_Sleep();
-            
-            // Allow ints to fire
-            IntState::Set(true);
         }
     }
     
     // Yield(): yield current task to the scheduler
     static void Yield() {
-        // IntState:
-        //   - int state must be restored upon return because scheduler clobbers it
-        IntState ints;
         // Return to scheduler
         _TaskSwap();
-        // Return to task
-        _TaskStartWork();
     }
     
     // Wait(fn): sleep current task until `fn` returns true.
@@ -322,8 +308,6 @@ public:
                 _TaskSwap();
                 continue;
             }
-            
-            _TaskStartWork();
             return r;
         }
     }
@@ -565,8 +549,6 @@ public:
             while (!_ISR.Wake);
         
         } while (_ISR.CurrentTime != deadline);
-        
-        _TaskStartWork();
     }
     
     // TODO: revisit -- this implementation is wrong because `T_Sleep()` will return upon any interrupt, not just our tick interrupt, so a tick won't necessarily have passed
@@ -651,9 +633,6 @@ private:
         _TasksRunnable = task;
     }
     
-    static void _TaskStartWork() {
-    }
-    
 //    [[noreturn]]
 //    static void _TaskRun() {
 //        // Enable ints when initially entering a task.
@@ -663,8 +642,6 @@ private:
 //        IntState::Set(true);
 ////        // Future invocations should invoke _TaskSwap
 ////        _TaskCurr->cont = _TaskSwap;
-////        // Signal that we did work
-////        _TaskStartWork();
 //        // Invoke task function
 //        _TaskCurr->run();
 //        // Tasks should never return
@@ -685,9 +662,14 @@ private:
 //    }
     
     // _TaskSwap(): swaps the current task and the saved task
-    // Ints must be disabled
-    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
+        IntState ints; // Save/restore interrupt state
+        __TaskSwap();
+    }
+    
+    // __TaskSwap(): swaps the current task and the saved task
+    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
+    static void __TaskSwap() {
         _SchedulerTaskSwap(_TaskCurr->sp);
     }
     
@@ -721,7 +703,6 @@ private:
         do {
             const auto r = fn();
             if (r) {
-                _TaskStartWork();
                 return std::make_optional(r);
             }
             
@@ -733,7 +714,6 @@ private:
         } while (_ISR.CurrentTime != deadline);
         
         // Timeout
-        _TaskStartWork();
         return std::optional<std::invoke_result_t<T_Fn>>{};
     }
     
