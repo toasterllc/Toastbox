@@ -53,14 +53,9 @@ private:
 // with a different task. Steps:
 //
 // (1) Push callee-saved regs onto stack, including $PC if needed
-// (2) tmp = $SP
-// (3) $SP = `sp`
-// (4) `sp` = tmp
-// if `initFn` != nullptr:
-//   (5) Jump to `initFn`
-// else
-//   (6) Pop callee-saved registers from stack
-//   (7) Return to caller
+// (2) Swap $SP (stack pointer) and `sp` (macro argument)
+// (3) Pop callee-saved registers from stack
+// (4) Return to caller
 
 #if defined(SchedulerMSP430)
 
@@ -134,7 +129,7 @@ private:
     
 #elif defined(SchedulerAMD64)
     
-#define _SchedulerTaskSwap(initFn, sp)                                                  \
+#define _SchedulerTaskSwap(sp)                                                          \
                                                                                         \
     /* ## Architecture = AMD64 */                                                       \
     asm volatile("push %%rbx" : : : );                                  /* (1) */       \
@@ -144,19 +139,15 @@ private:
     asm volatile("push %%r14" : : : );                                  /* (1) */       \
     asm volatile("push %%r15" : : : );                                  /* (1) */       \
     asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (2) */       \
-    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (3) */       \
-    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (4) */       \
-    if constexpr (!std::is_null_pointer<decltype(initFn)>::value) {                     \
-        asm volatile("jmp %0" : : "i" (initFn) : );                     /* (5) */       \
-    } else {                                                                            \
-        asm volatile("pop %%r15" : : : );                               /* (6) */       \
-        asm volatile("pop %%r14" : : : );                               /* (6) */       \
-        asm volatile("pop %%r13" : : : );                               /* (6) */       \
-        asm volatile("pop %%r12" : : : );                               /* (6) */       \
-        asm volatile("pop %%rbp" : : : );                               /* (6) */       \
-        asm volatile("pop %%rbx" : : : );                               /* (6) */       \
-        asm volatile("ret" : : : );                                     /* (7) */       \
-    }
+    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (2) */       \
+    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (2) */       \
+    asm volatile("pop %%r15" : : : );                                   /* (3) */       \
+    asm volatile("pop %%r14" : : : );                                   /* (3) */       \
+    asm volatile("pop %%r13" : : : );                                   /* (3) */       \
+    asm volatile("pop %%r12" : : : );                                   /* (3) */       \
+    asm volatile("pop %%rbp" : : : );                                   /* (3) */       \
+    asm volatile("pop %%rbx" : : : );                                   /* (3) */       \
+    asm volatile("ret" : : : );                                         /* (4) */       \
     
 #else
     
@@ -165,8 +156,6 @@ private:
 #endif
 
 // MARK: - Scheduler
-
-using TaskFn = void(*)();
 
 template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
@@ -205,21 +194,21 @@ public:
         _Task* _readerNext = nullptr;
     };
     
-    // Start<task,fn>(): starts `task` running with `fn`
-    template <typename T_Task, typename T_Fn>
-    static void Start(T_Fn&& fn) {
-        constexpr _Task& task = _GetTask<T_Task>();
-        task.run = fn;
-        task.cont = _TaskSwapInit;
-        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-    }
-    
-    // Stop<task>(): stops `task`
-    template <typename T_Task>
-    static void Stop() {
-        constexpr _Task& task = _GetTask<T_Task>();
-        task.cont = _TaskNop;
-    }
+//    // Start<task,fn>(): starts `task` running with `fn`
+//    template <typename T_Task, typename T_Fn>
+//    static void Start(T_Fn&& fn) {
+//        constexpr _Task& task = _GetTask<T_Task>();
+//        task.run = fn;
+//        task.cont = _TaskSwapInit;
+//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
+//    }
+//    
+//    // Stop<task>(): stops `task`
+//    template <typename T_Task>
+//    static void Stop() {
+//        constexpr _Task& task = _GetTask<T_Task>();
+//        task.cont = _TaskNop;
+//    }
     
     // Running<task>(): returns whether `task` is running
     template <typename T_Task>
@@ -245,15 +234,12 @@ public:
                 _Task** tasksRunnable = &_TasksRunnable;
                 
                 do {
-                    // Disable ints before entering a task.
-                    // We're not using an IntState here because we don't want the IntState dtor
-                    // cleanup behavior when exiting our scope; we want to keep ints disabled
-                    // across tasks.
                     IntState::Set(false);
                     
                     *tasksRunnable = _TaskCurr;
                     _TaskCurrRunnable = true;
-                    _TaskCurr->cont();
+                    _TaskSwap();
+//                    _TaskCurr->cont();
                     
                     // Check stack guards
                     if constexpr ((bool)T_StackGuardCount) {
@@ -609,12 +595,14 @@ public:
 private:
     // MARK: - Types
     
+    using _TaskFn = void(*)();
+    
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
     using _StackGuard = uintptr_t[T_StackGuardCount];
     
     struct _Task {
-        TaskFn run = nullptr;
-        TaskFn cont = nullptr;
+        _TaskFn run = nullptr;
+//        TaskFn cont = nullptr;
         void* sp = nullptr;
         _Task* next = nullptr;
         _StackGuard& stackGuard;
@@ -652,37 +640,41 @@ private:
     static void _TaskStartWork() {
     }
     
-    static void _TaskRun() {
-        // Enable ints when initially entering a task.
-        // We're not using an IntState here because this function never actually returns (since
-        // we call _TaskSwap() at the end to return to the scheduler) and therefore we don't
-        // need IntState's dtor cleanup behavior.
-        IntState::Set(true);
-        // Future invocations should invoke _TaskSwap
-        _TaskCurr->cont = _TaskSwap;
-        // Signal that we did work
-        _TaskStartWork();
-        // Invoke task function
-        _TaskCurr->run();
-        // The task finished
-        // Future invocations should do nothing
-        _TaskCurr->cont = _TaskNop;
-        // Return to scheduler
-        _TaskSwap();
-    }
+//    [[noreturn]]
+//    static void _TaskRun() {
+//        // Enable ints when initially entering a task.
+//        // We're not using an IntState here because this function never actually returns (since
+//        // we call _TaskSwap() at the end to return to the scheduler) and therefore we don't
+//        // need IntState's dtor cleanup behavior.
+//        IntState::Set(true);
+////        // Future invocations should invoke _TaskSwap
+////        _TaskCurr->cont = _TaskSwap;
+////        // Signal that we did work
+////        _TaskStartWork();
+//        // Invoke task function
+//        _TaskCurr->run();
+//        // Tasks should never return
+//        Assert(false);
+//        
+////        // The task finished
+////        // Future invocations should do nothing
+////        _TaskCurr->cont = _TaskNop;
+//        // Return to scheduler
+////        for (;;) _TaskSwap();
+//    }
     
-    // _TaskSwapInit(): swap task in and jump to _TaskRun
-    // Ints must be disabled
-    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void _TaskSwapInit() {
-        _SchedulerTaskSwap(_TaskRun, _TaskCurr->sp);
-    }
+//    // _TaskSwapInit(): swap task in and jump to _TaskRun
+//    // Ints must be disabled
+//    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
+//    static void _TaskSwapInit() {
+//        _SchedulerTaskSwap(_TaskRun, _TaskCurr->sp);
+//    }
     
     // _TaskSwap(): swaps the current task and the saved task
     // Ints must be disabled
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void _TaskSwap() {
-        _SchedulerTaskSwap(nullptr, _TaskCurr->sp);
+        _SchedulerTaskSwap(_TaskCurr->sp);
     }
     
     static void _TaskNop() {
@@ -750,7 +742,7 @@ private:
         return {
             _Task{
                 .run        = T_Tasks::Run,
-                .cont       = _TaskSwapInit,
+//                .cont       = _TaskSwapInit,
                 .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
                 .next       = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx] : nullptr),
                 .stackGuard = *(_StackGuard*)T_Tasks::Stack,
