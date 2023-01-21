@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <optional>
 #include <algorithm>
+#include <array>
 
 namespace Toastbox {
 
@@ -147,10 +148,6 @@ private:
 
 using TaskFn = void(*)();
 
-struct TaskOptions {
-    TaskFn AutoStart = nullptr;
-};
-
 template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
@@ -215,7 +212,7 @@ public:
     [[noreturn]]
     static void Run() {
         // Initialize the main stack guard and each task's stack guard
-        if constexpr (T_StackGuardCount) {
+        if constexpr ((bool)T_StackGuardCount) {
             _StackGuardInit(_MainStackGuard);
             for (_Task& task : _Tasks) {
                 _StackGuardInit(task.stackGuard);
@@ -239,7 +236,7 @@ public:
                     _TaskCurr->cont();
                     
                     // Check stack guards
-                    if constexpr (T_StackGuardCount) {
+                    if constexpr ((bool)T_StackGuardCount) {
                         _StackGuardCheck(_MainStackGuard);
                         _StackGuardCheck(_TaskCurr->stackGuard);
                     }
@@ -726,24 +723,33 @@ private:
         return std::is_same_v<T_1,T_2> ? 0 : 1 + _ElmIdx<T_1, T_s...>();
     }
     
-    template <TaskFn T_Fn, TaskFn T_A, TaskFn T_B>
-    struct _FnConditional { static constexpr TaskFn Fn = T_A; };
-    template <TaskFn T_A, TaskFn T_B>
-    struct _FnConditional<nullptr, T_A, T_B> { static constexpr TaskFn Fn = T_B; };
+    static constexpr size_t _TaskCount = sizeof...(T_Tasks);
     
-    static inline _Task _Tasks[] = {_Task{
-        .run = T_Tasks::Options.AutoStart,
-        .cont = _FnConditional<T_Tasks::Options.AutoStart, _TaskSwapInit, _TaskNop>::Fn,
-        .sp = T_Tasks::Stack + sizeof(T_Tasks::Stack),
-        .stackGuard = *(_StackGuard*)T_Tasks::Stack,
-    }...};
+    template <size_t... T_Idx>
+    static constexpr std::array<_Task,_TaskCount> _TasksGet(std::integer_sequence<size_t, T_Idx...>) {
+        return {
+            _Task{
+                .run        = T_Tasks::Run,
+                .cont       = _TaskSwapInit,
+                .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
+                .next       = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx] : nullptr),
+                .stackGuard = *(_StackGuard*)T_Tasks::Stack,
+            }...,
+        };
+    }
+    
+    static constexpr std::array<_Task,_TaskCount> _TasksGet() {
+        return _TasksGet(std::make_integer_sequence<size_t, _TaskCount>{});
+    }
+    
+    static inline std::array<_Task,_TaskCount> _Tasks = _TasksGet();
     
     // _MainStackGuard: ideally this would be `static constexpr` instead of `static inline`,
     // but C++ doesn't allow constexpr reinterpret_cast.
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-    static inline _Task* _TasksRunnable = nullptr;
+    static inline _Task* _TasksRunnable = &_Tasks[0];
     static inline _Task* _TaskCurr = nullptr;
     static inline bool _TaskCurrRunnable = false;
     
