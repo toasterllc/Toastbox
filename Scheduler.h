@@ -52,10 +52,12 @@ private:
 // _SchedulerTaskSwap(): architecture-specific macro that swaps the current task
 // with a different task. Steps:
 //
-// (1) Push callee-saved regs onto stack, including $PC if needed
-// (2) Swap $SP (stack pointer) and `sp` (macro argument)
-// (3) Pop callee-saved registers from stack
-// (4) Return to caller
+// (1) Push interrupt state
+// (2) Push callee-saved regs onto stack, including $PC if needed
+// (3) Swap $SP (stack pointer) and `sp` (macro argument)
+// (4) Pop callee-saved registers from stack
+// (5) Pop interrupt state
+// (6) Return to caller
 
 #if defined(SchedulerMSP430)
 
@@ -133,21 +135,23 @@ private:
                                                                                         \
     /* ## Architecture = AMD64 */                                                       \
     asm volatile("push %%rbx" : : : );                                  /* (1) */       \
-    asm volatile("push %%rbp" : : : );                                  /* (1) */       \
-    asm volatile("push %%r12" : : : );                                  /* (1) */       \
-    asm volatile("push %%r13" : : : );                                  /* (1) */       \
-    asm volatile("push %%r14" : : : );                                  /* (1) */       \
-    asm volatile("push %%r15" : : : );                                  /* (1) */       \
-    asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (2) */       \
-    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (2) */       \
-    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (2) */       \
-    asm volatile("pop %%r15" : : : );                                   /* (3) */       \
-    asm volatile("pop %%r14" : : : );                                   /* (3) */       \
-    asm volatile("pop %%r13" : : : );                                   /* (3) */       \
-    asm volatile("pop %%r12" : : : );                                   /* (3) */       \
-    asm volatile("pop %%rbp" : : : );                                   /* (3) */       \
-    asm volatile("pop %%rbx" : : : );                                   /* (3) */       \
-    asm volatile("ret" : : : );                                         /* (4) */       \
+    asm volatile("push %%rbx" : : : );                                  /* (2) */       \
+    asm volatile("push %%rbp" : : : );                                  /* (2) */       \
+    asm volatile("push %%r12" : : : );                                  /* (2) */       \
+    asm volatile("push %%r13" : : : );                                  /* (2) */       \
+    asm volatile("push %%r14" : : : );                                  /* (2) */       \
+    asm volatile("push %%r15" : : : );                                  /* (2) */       \
+    asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (3) */       \
+    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (3) */       \
+    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (3) */       \
+    asm volatile("pop %%r15" : : : );                                   /* (4) */       \
+    asm volatile("pop %%r14" : : : );                                   /* (4) */       \
+    asm volatile("pop %%r13" : : : );                                   /* (4) */       \
+    asm volatile("pop %%r12" : : : );                                   /* (4) */       \
+    asm volatile("pop %%rbp" : : : );                                   /* (4) */       \
+    asm volatile("pop %%rbx" : : : );                                   /* (4) */       \
+    asm volatile("pop %%rbx" : : : );                                   /* (5) */       \
+    asm volatile("ret" : : : );                                         /* (6) */       \
     
 #else
     
@@ -223,9 +227,19 @@ public:
         // Initialize the main stack guard and each task's stack guard
         if constexpr ((bool)T_StackGuardCount) {
             _StackGuardInit(_MainStackGuard);
-            for (_Task& task : _Tasks) {
+        }
+        
+        // Prepare every task
+        for (_Task& task : _Tasks) {
+            if constexpr ((bool)T_StackGuardCount) {
                 _StackGuardInit(task.stackGuard);
             }
+            
+            void** sp = task.sp-2;
+            sp[0] = ;
+            sp[1] = task.run;
+            
+//            (void**)task.sp
         }
         
         for (;;) {
