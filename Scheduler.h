@@ -247,13 +247,13 @@ public:
         IntState::Set(true);
         
         for (;;) {
-            while (_TasksRunnable) {
-                _Task** tasksRunnable = &_TasksRunnable;
-                _TaskCurr = _TasksRunnable;
+            while (_TasksRunning) {
+                _Task** tasksRunning = &_TasksRunning;
+                _TaskCurr = _TasksRunning;
                 
                 do {
-                    *tasksRunnable = _TaskCurr;
-                    _TaskCurrRunnable = true;
+                    *tasksRunning = _TaskCurr;
+                    _TaskCurrRunning = true;
                     _TaskSwap();
                     
                     // Check stack guards
@@ -262,15 +262,15 @@ public:
                         _StackGuardCheck(_TaskCurr->stackGuard);
                     }
                     
-                    if (_TaskCurrRunnable) {
-                        tasksRunnable = &_TaskCurr->next;
+                    if (_TaskCurrRunning) {
+                        tasksRunning = &_TaskCurr->next;
                     }
                     
                     _TaskCurr = _TaskCurr->next;
                 } while (_TaskCurr);
                 
                 // End of task list
-                *tasksRunnable = nullptr;
+                *tasksRunning = nullptr;
             }
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
@@ -419,6 +419,7 @@ public:
                 return;
             }
             
+            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writerNext slot
             // There's already a writer
             // Steal the chan._writerNext slot, and restore it when someone wakes us
             _Task* writerNext = chan._writerNext;
@@ -455,6 +456,8 @@ public:
                 return;
             }
             
+            
+            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _readerNext slot
             // There's already a reader
             // Steal the chan._readerNext slot, and restore it when someone wakes us
             _Task* readerNext = chan._readerNext;
@@ -487,6 +490,7 @@ public:
                 return;
             }
             
+            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writer slot
             // Steal the chan._writer slot, and restore it when someone wakes us
             _Task* writerPrev = chan._writer;
             chan._writer = _TaskCurr;
@@ -518,6 +522,7 @@ public:
                 return val;
             }
             
+            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _reader slot
             // Steal the chan._reader slot, and restore it when someone wakes us
             _Task* readerPrev = chan._reader;
             chan._reader = _TaskCurr;
@@ -544,18 +549,20 @@ public:
         //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR
         //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
+        _TaskCurr->wake = _ISR.CurrentTime+ticks+1;
+        _TaskSleep();
         
-        const Deadline deadline = _ISR.CurrentTime+ticks+1;
-        do {
-            // Update _ISR.WakeDeadline
-            _ProposeWakeDeadline(deadline);
-            
-            // Wait until we wake because _ISR.WakeDeadline expired (not necessarily
-            // because of this task though)
-            do _TaskSwap();
-            while (!_ISR.Wake);
-        
-        } while (_ISR.CurrentTime != deadline);
+//        const Deadline deadline = _ISR.CurrentTime+ticks+1;
+//        do {
+//            // Update _ISR.WakeDeadline
+//            _ProposeWakeDeadline(deadline);
+//            
+//            // Wait until we wake because _ISR.WakeDeadline expired (not necessarily
+//            // because of this task though)
+//            do _TaskSwap();
+//            while (!_ISR.Wake);
+//        
+//        } while (_ISR.CurrentTime != deadline);
     }
     
     // TODO: revisit -- this implementation is wrong because `T_Sleep()` will return upon any interrupt, not just our tick interrupt, so a tick won't necessarily have passed
@@ -607,6 +614,7 @@ private:
         _TaskFn run = nullptr;
 //        TaskFn cont = nullptr;
         void* sp = nullptr;
+        Deadline wake = 0;
         _Task* next = nullptr;
         _StackGuard& stackGuard;
     };
@@ -627,17 +635,17 @@ private:
     
     // _TaskSleep(): mark current task as sleeping and return to scheduler
     static void _TaskSleep() {
-        // Notify scheduler that this task should sleep
-        _TaskCurrRunnable = true;
+        // Notify scheduler that this task is no longer running
+        _TaskCurrRunning = false;
         // Return to scheduler
         _TaskSwap();
     }
     
-    // _TaskWake: insert the given task into the runnable list
+    // _TaskWake: insert the given task into the running list
     static void _TaskWake(_Task* task) {
-        // Insert task into the runnable list
-        task->next = _TasksRunnable;
-        _TasksRunnable = task;
+        // Insert task into the running list
+        task->next = _TasksRunning;
+        _TasksRunning = task;
     }
     
 //    [[noreturn]]
@@ -762,9 +770,10 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-    static inline _Task* _TasksRunnable = &_Tasks[0];
+    static inline _Task* _TasksRunning = &_Tasks[0];
+    static inline _Task* _TasksSleeping = nullptr;
     static inline _Task* _TaskCurr = nullptr;
-    static inline bool _TaskCurrRunnable = false;
+    static inline bool _TaskCurrRunning = false;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
