@@ -235,11 +235,13 @@ public:
             
             const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
             void**& sp = *((void***)&task.sp);
-            // Extra slots to ensure `_SchedulerStackAlign` alignment
+            // Push extra slots to ensure `_SchedulerStackAlign` alignment
             sp -= extra;
-            // Write initial return address == task.run address == Task::Run
+            // Push initial return address == task.run address == Task::Run
             sp--;
             *sp = (void*)task.run;
+            // Push registers that _SchedulerTaskSwap() expects to be saved on the stack.
+            // We don't care about what values the registers contain since they're not actually used.
             sp -= _SchedulerStackSaveRegCount;
         }
         
@@ -610,6 +612,13 @@ private:
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
     using _StackGuard = uintptr_t[T_StackGuardCount];
     
+    template <typename T>
+    class _Link {
+    public:
+        T*& prev = next;
+        T* next = nullptr;
+    };
+    
     struct _Task {
         _TaskFn run = nullptr;
 //        TaskFn cont = nullptr;
@@ -642,6 +651,7 @@ private:
         _TaskSwap();
     }
     
+    #warning TODO: if the task was sleeping until a given deadline, do we need to do anything special here?
     // _TaskWake: insert the given task into the running list
     static void _TaskWake(_Task* task) {
         // Insert task into the running list
