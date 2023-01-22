@@ -185,7 +185,6 @@ public:
         static constexpr size_t Cap = T_Cap;
         
     private:
-        
         T_Type _q[std::max((size_t)1, T_Cap)];
         size_t _w = 0;
         size_t _r = 0;
@@ -222,13 +221,14 @@ public:
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
-        // Initialize the main stack guard and each task's stack guard
+        // Initialize the main stack guard
         if constexpr ((bool)T_StackGuardCount) {
             _StackGuardInit(_MainStackGuard);
         }
         
         // Prepare every task
         for (_Task& task : _Tasks) {
+            // Initialize the task's stack guard
             if constexpr ((bool)T_StackGuardCount) {
                 _StackGuardInit(task.stackGuard);
             }
@@ -390,82 +390,82 @@ public:
     
     
     
-    // Unbuffered send
-    template <
-    typename T,
-    size_t _T_Cap = T::Cap,
-    typename std::enable_if_t<_T_Cap==0, int> = 0
-    >
-    static void Send(T& chan, const typename T::Type& val) {
-        IntState ints(false);
-        for (;;) {
-            // If a reader is already waiting, set the value and wake it
-            if (chan._reader) {
-                chan._q[0] = val;
-                _TaskWake(chan._reader);
-                return;
-            }
-            
-            // Otherwise, there's no reader waiting.
-            // If a writer doesn't already exist, make ourself the writer and wait for the reader to wake us.
-            if (!chan._writer) {
-                chan._q[0] = val;
-                chan._writer = _TaskCurr;
-                _TaskSleep();
-                chan._writer = nullptr;
-                if (chan._writerNext) {
-                    _TaskWake(chan._writerNext);
-                }
-                return;
-            }
-            
-            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writerNext slot
-            // There's already a writer
-            // Steal the chan._writerNext slot, and restore it when someone wakes us
-            _Task* writerNext = chan._writerNext;
-            chan._writerNext = _TaskCurr;
-            _TaskSleep();
-            chan._writerNext = writerNext;
-        }
-    }
-    
-    // Unbuffered receive
-    template <
-    typename T,
-    size_t _T_Cap = T::Cap,
-    typename std::enable_if_t<_T_Cap==0, int> = 0
-    >
-    static typename T::Type Recv(T& chan) {
-        IntState ints(false);
-        for (;;) {
-            // If a writer is already waiting, get the value and wake it
-            if (chan._writer) {
-                _TaskWake(chan._writer);
-                return chan._q[0];
-            }
-            
-            // Otherwise, there's no writer waiting.
-            // If a reader doesn't already exist, make ourself the reader and wait for the writer to wake us.
-            if (!chan._reader) {
-                chan._reader = _TaskCurr;
-                _TaskSleep();
-                chan._reader = nullptr;
-                if (chan._readerNext) {
-                    _TaskWake(chan._readerNext);
-                }
-                return;
-            }
-            
-            
-            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _readerNext slot
-            // There's already a reader
-            // Steal the chan._readerNext slot, and restore it when someone wakes us
-            _Task* readerNext = chan._readerNext;
-            chan._readerNext = _TaskCurr;
-            _TaskSleep();
-            chan._readerNext = readerNext;
-        }
-    }
+//    // Unbuffered send
+//    template <
+//    typename T,
+//    size_t _T_Cap = T::Cap,
+//    typename std::enable_if_t<_T_Cap==0, int> = 0
+//    >
+//    static void Send(T& chan, const typename T::Type& val) {
+//        IntState ints(false);
+//        for (;;) {
+//            // If a reader is already waiting, set the value and wake it
+//            if (chan._reader) {
+//                chan._q[0] = val;
+//                _TaskWake(chan._reader);
+//                return;
+//            }
+//            
+//            // Otherwise, there's no reader waiting.
+//            // If a writer doesn't already exist, make ourself the writer and wait for the reader to wake us.
+//            if (!chan._writer) {
+//                chan._q[0] = val;
+//                chan._writer = _TaskCurr;
+//                _TaskSleep();
+//                chan._writer = nullptr;
+//                if (chan._writerNext) {
+//                    _TaskWake(chan._writerNext);
+//                }
+//                return;
+//            }
+//            
+//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writerNext slot
+//            // There's already a writer
+//            // Steal the chan._writerNext slot, and restore it when someone wakes us
+//            _Task* writerNext = chan._writerNext;
+//            chan._writerNext = _TaskCurr;
+//            _TaskSleep();
+//            chan._writerNext = writerNext;
+//        }
+//    }
+//    
+//    // Unbuffered receive
+//    template <
+//    typename T,
+//    size_t _T_Cap = T::Cap,
+//    typename std::enable_if_t<_T_Cap==0, int> = 0
+//    >
+//    static typename T::Type Recv(T& chan) {
+//        IntState ints(false);
+//        for (;;) {
+//            // If a writer is already waiting, get the value and wake it
+//            if (chan._writer) {
+//                _TaskWake(chan._writer);
+//                return chan._q[0];
+//            }
+//            
+//            // Otherwise, there's no writer waiting.
+//            // If a reader doesn't already exist, make ourself the reader and wait for the writer to wake us.
+//            if (!chan._reader) {
+//                chan._reader = _TaskCurr;
+//                _TaskSleep();
+//                chan._reader = nullptr;
+//                if (chan._readerNext) {
+//                    _TaskWake(chan._readerNext);
+//                }
+//                return;
+//            }
+//            
+//            
+//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _readerNext slot
+//            // There's already a reader
+//            // Steal the chan._readerNext slot, and restore it when someone wakes us
+//            _Task* readerNext = chan._readerNext;
+//            chan._readerNext = _TaskCurr;
+//            _TaskSleep();
+//            chan._readerNext = readerNext;
+//        }
+//    }
     
     // Buffered send
     template <
@@ -616,6 +616,7 @@ private:
         void* sp = nullptr;
         Deadline wake = 0;
         _Task* next = nullptr;
+        _Task* nextChannel = nullptr;
         _StackGuard& stackGuard;
     };
     
