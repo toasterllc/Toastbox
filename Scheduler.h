@@ -237,7 +237,7 @@ public:
             void**& sp = *((void***)&task.sp);
             // Extra slots to ensure `_SchedulerStackAlign` alignment
             sp -= extra;
-            // Write initial return address -> task.run address -> Task::Run
+            // Write initial return address == task.run address == Task::Run
             sp--;
             *sp = (void*)task.run;
             sp -= _SchedulerStackSaveRegCount;
@@ -248,14 +248,13 @@ public:
         
         for (;;) {
             while (_TasksRunnable) {
-                _TaskCurr = _TasksRunnable;
                 _Task** tasksRunnable = &_TasksRunnable;
+                _TaskCurr = _TasksRunnable;
                 
                 do {
                     *tasksRunnable = _TaskCurr;
                     _TaskCurrRunnable = true;
                     _TaskSwap();
-//                    _TaskCurr->cont();
                     
                     // Check stack guards
                     if constexpr ((bool)T_StackGuardCount) {
@@ -293,99 +292,99 @@ public:
         _TaskSwap();
     }
     
-    // Wait(fn): sleep current task until `fn` returns true.
-    // `fn` must not cause any task to become runnable.
-    // If it does, the scheduler may not notice that the task is runnable and
-    // could go to sleep instead of running the task.
-    //
-    // If ints are disabled before calling Wait(), ints are guaranteed to have
-    // remained disabled between `fn` executing and Wait() returning, and
-    // therefore the condition that `fn` checks is guaranteed to remain true
-    // after Wait() returns.
-    //
-    // Ints are disabled while calling `fn`
-    template <typename T_Fn>
-    static auto Wait(T_Fn&& fn) {
-        // IntState:
-        //   - ints must be disabled when calling `fn`
-        //   - int state must be restored upon return because scheduler clobbers it
-        IntState ints(false);
-        for (;;) {
-            const auto r = fn();
-            if (!r) {
-                _TaskSwap();
-                continue;
-            }
-            return r;
-        }
-    }
+//    // Wait(fn): sleep current task until `fn` returns true.
+//    // `fn` must not cause any task to become runnable.
+//    // If it does, the scheduler may not notice that the task is runnable and
+//    // could go to sleep instead of running the task.
+//    //
+//    // If ints are disabled before calling Wait(), ints are guaranteed to have
+//    // remained disabled between `fn` executing and Wait() returning, and
+//    // therefore the condition that `fn` checks is guaranteed to remain true
+//    // after Wait() returns.
+//    //
+//    // Ints are disabled while calling `fn`
+//    template <typename T_Fn>
+//    static auto Wait(T_Fn&& fn) {
+//        // IntState:
+//        //   - ints must be disabled when calling `fn`
+//        //   - int state must be restored upon return because scheduler clobbers it
+//        IntState ints(false);
+//        for (;;) {
+//            const auto r = fn();
+//            if (!r) {
+//                _TaskSwap();
+//                continue;
+//            }
+//            return r;
+//        }
+//    }
     
-    // Wait(): sleep current task until `fn` returns true, or `ticks` have passed.
-    // See Wait() function above for more info.
-    template <typename T_Fn>
-    static auto Wait(Ticks ticks, T_Fn&& fn) {
-        // IntState:
-        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
-        //   - ints must be disabled because _WaitUntil() requires it
-        //   - int state must be restored upon return because scheduler clobbers it
-        IntState ints(false);
-        const Deadline deadline = _ISR.CurrentTime+ticks+1;
-        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
-    }
-    
-    // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-    //
-    // For a deadline to be considered in the past, it must be in the range:
-    //   [CurrentTime - TicksMax/2, CurrentTime]
-    // For a deadline to be considered in the future, it must be in the range:
-    //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
-    //
-    // where TicksMax is the maximum value that the `Ticks` type can hold.
-    //
-    // See comment in function body for more info regarding the deadline parameter.
-    //
-    // See Wait() function above for more info.
-    template <typename T_Fn>
-    static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
-        // IntState:
-        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
-        //   - ints must be disabled because _WaitUntil() requires it
-        //   - int state must be restored upon return because scheduler clobbers it
-        IntState ints(false);
-        
-        // Test whether `deadline` has already passed.
-        //
-        // Because _ISR.CurrentTime rolls over periodically, it's impossible to differentiate
-        // between `deadline` passing versus merely being far in the future. (For example,
-        // consider the case where time is tracked with a uint8_t: if Deadline=127 and
-        // CurrentTime=128, either Deadline passed one tick ago, or Deadline will pass
-        // 255 ticks in the future.)
-        //
-        // To solve this ambiguity, we require deadlines to be within
-        // [-TicksMax/2, +TicksMax/2+1] of _ISR.CurrentTime (where TicksMax is the maximum
-        // value that the `Ticks` type can hold), which allows us to employ the following
-        // heuristic:
-        //
-        // For a deadline to be considered in the past, it must be in the range:
-        //   [CurrentTime - TicksMax/2, CurrentTime]
-        // For a deadline to be considered in the future, it must be in the range:
-        //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
-        //
-        // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
-        // can employ the above heuristic to determine whether `deadline` has already passed.
-        constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
-        const bool deadlinePassed = _ISR.CurrentTime-deadline <= TicksMax/2;
-        if (deadlinePassed) {
-            return std::optional<std::invoke_result_t<T_Fn>>{};
-        }
-        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
-    }
-    
-    // Wait<tasks>(): sleep current task until `tasks` all stop running
-    template <typename... T_Tsks>
-    static void Wait() {
-        Wait([] { return (!Running<T_Tsks>() && ...); });
-    }
+//    // Wait(): sleep current task until `fn` returns true, or `ticks` have passed.
+//    // See Wait() function above for more info.
+//    template <typename T_Fn>
+//    static auto Wait(Ticks ticks, T_Fn&& fn) {
+//        // IntState:
+//        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
+//        //   - ints must be disabled because _WaitUntil() requires it
+//        //   - int state must be restored upon return because scheduler clobbers it
+//        IntState ints(false);
+//        const Deadline deadline = _ISR.CurrentTime+ticks+1;
+//        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
+//    }
+//    
+//    // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
+//    //
+//    // For a deadline to be considered in the past, it must be in the range:
+//    //   [CurrentTime - TicksMax/2, CurrentTime]
+//    // For a deadline to be considered in the future, it must be in the range:
+//    //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
+//    //
+//    // where TicksMax is the maximum value that the `Ticks` type can hold.
+//    //
+//    // See comment in function body for more info regarding the deadline parameter.
+//    //
+//    // See Wait() function above for more info.
+//    template <typename T_Fn>
+//    static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
+//        // IntState:
+//        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
+//        //   - ints must be disabled because _WaitUntil() requires it
+//        //   - int state must be restored upon return because scheduler clobbers it
+//        IntState ints(false);
+//        
+//        // Test whether `deadline` has already passed.
+//        //
+//        // Because _ISR.CurrentTime rolls over periodically, it's impossible to differentiate
+//        // between `deadline` passing versus merely being far in the future. (For example,
+//        // consider the case where time is tracked with a uint8_t: if Deadline=127 and
+//        // CurrentTime=128, either Deadline passed one tick ago, or Deadline will pass
+//        // 255 ticks in the future.)
+//        //
+//        // To solve this ambiguity, we require deadlines to be within
+//        // [-TicksMax/2, +TicksMax/2+1] of _ISR.CurrentTime (where TicksMax is the maximum
+//        // value that the `Ticks` type can hold), which allows us to employ the following
+//        // heuristic:
+//        //
+//        // For a deadline to be considered in the past, it must be in the range:
+//        //   [CurrentTime - TicksMax/2, CurrentTime]
+//        // For a deadline to be considered in the future, it must be in the range:
+//        //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
+//        //
+//        // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
+//        // can employ the above heuristic to determine whether `deadline` has already passed.
+//        constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
+//        const bool deadlinePassed = _ISR.CurrentTime-deadline <= TicksMax/2;
+//        if (deadlinePassed) {
+//            return std::optional<std::invoke_result_t<T_Fn>>{};
+//        }
+//        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
+//    }
+//    
+//    // Wait<tasks>(): sleep current task until `tasks` all stop running
+//    template <typename... T_Tsks>
+//    static void Wait() {
+//        Wait([] { return (!Running<T_Tsks>() && ...); });
+//    }
     
     
     
@@ -704,26 +703,26 @@ private:
         }
     }
     
-    // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-    // Ints must be disabled
-    template <typename T_Fn>
-    static auto _WaitUntil(Deadline deadline, T_Fn&& fn) {
-        do {
-            const auto r = fn();
-            if (r) {
-                return std::make_optional(r);
-            }
-            
-            // Update _ISR.WakeDeadline
-            _ProposeWakeDeadline(deadline);
-            
-            // Next task
-            _TaskSwap();
-        } while (_ISR.CurrentTime != deadline);
-        
-        // Timeout
-        return std::optional<std::invoke_result_t<T_Fn>>{};
-    }
+//    // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
+//    // Ints must be disabled
+//    template <typename T_Fn>
+//    static auto _WaitUntil(Deadline deadline, T_Fn&& fn) {
+//        do {
+//            const auto r = fn();
+//            if (r) {
+//                return std::make_optional(r);
+//            }
+//            
+//            // Update _ISR.WakeDeadline
+//            _ProposeWakeDeadline(deadline);
+//            
+//            // Next task
+//            _TaskSwap();
+//        } while (_ISR.CurrentTime != deadline);
+//        
+//        // Timeout
+//        return std::optional<std::invoke_result_t<T_Fn>>{};
+//    }
     
     // _GetTask(): returns the _Task& for the given T_Task
     template <typename T_Task>
