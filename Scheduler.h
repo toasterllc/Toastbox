@@ -128,7 +128,9 @@ private:
     }
     
 #elif defined(SchedulerAMD64)
-    
+
+#define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
+#define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that _SchedulerTaskSwap saves
 #define _SchedulerTaskSwap(sp)                                                          \
                                                                                         \
     /* ## Architecture = AMD64 */                                                       \
@@ -231,8 +233,14 @@ public:
                 _StackGuardInit(task.stackGuard);
             }
             
-            _TaskFn* sp = (_TaskFn*)task.sp;
-            *(sp-1) = task.run;
+            const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
+            void**& sp = *((void***)&task.sp);
+            // Extra slots to ensure `_SchedulerStackAlign` alignment
+            sp -= extra;
+            // Write initial return address -> task.run address -> Task::Run
+            sp--;
+            *sp = (void*)task.run;
+            sp -= _SchedulerStackSaveRegCount;
         }
         
         // Enable interrupts
@@ -738,7 +746,7 @@ private:
                 .run        = T_Tasks::Run,
 //                .cont       = _TaskSwapInit,
                 .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
-                .next       = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx] : nullptr),
+                .next       = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx+1] : nullptr),
                 .stackGuard = *(_StackGuard*)T_Tasks::Stack,
             }...,
         };
