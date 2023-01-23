@@ -643,7 +643,7 @@ public:
                 
                 // If there's a receiver, wake it
                 if (!chan._receivers.empty()) {
-                    _TaskWake(*static_cast<_Task*>(chan._receivers.next));
+                    _TaskWake(*chan._receivers.next);
                 }
                 return;
             }
@@ -698,7 +698,7 @@ public:
                 
                 // If there's a sender, wake it
                 if (!chan._senders.empty()) {
-                    _TaskWake(*static_cast<_Task*>(chan._senders.next));
+                    _TaskWake(*chan._senders.next);
                 }
                 return val;
             }
@@ -812,7 +812,7 @@ private:
     }
     
     // _TaskSleep(deadline): sleep current task until `wake`.
-    // Returns true if the task awoke early due to another task waking it.
+    // Returns true if the task awoke early because another task woke it.
     static bool _TaskSleep(Deadline wake) {
         _TaskCurrSleepType = _SleepType::Deadline;
         _TaskCurr->wake = wake;
@@ -824,7 +824,9 @@ private:
     
     #warning TODO: if the task was sleeping until a given deadline, do we need to do anything special here?
     // _TaskWake: insert the given task into the running list
-    static void _TaskWake(_Task& task) {
+    template <typename T>
+    static void _TaskWake(T& t) {
+        _Task& task = static_cast<_Task&>(t);
         // Detach task from whatever lists it's a part of
         _Detach(static_cast<_ListRunSleep&>(task));
         _Detach(static_cast<_ListChannel&>(task));
