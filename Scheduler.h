@@ -316,8 +316,7 @@ public:
                     break;
                 
                 case _SleepType::Indefinite: {
-                    // Sleep `_TaskCurr` indefinitely by detaching it from
-                    // the runnable list of tasks
+                    // Detach `_TaskCurr` from the runnable list of tasks to sleep it
                     _Detach(static_cast<_ListRunSleep&>(*_TaskCurr));
 //            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
                     
@@ -333,19 +332,56 @@ public:
                 }
                 
                 case _SleepType::Deadline: {
+                    // Detach `_TaskCurr` from the runnable list of tasks
                     _Detach(static_cast<_ListRunSleep&>(*_TaskCurr));
                     
-                    // Find where to insert the task
+                    const Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
                     _ListRunSleep* insert = &_ListSleep;
-                    Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
-                    for (_ListRunSleep* i=_ListSleep.next; i!=&_ListSleep; i=i->next) {
-                        _Task& t = static_cast<_Task&>(*i);
-                        Ticks d = t.wake - _ISR.CurrentTime;
-                        if (delta > d) break;
+                    for (;;) {
+                        _ListRunSleep*const i = insert->next;
+                        // If we're at the end of the list, we're done
+                        if (i == &_ListSleep) break;
+                        const _Task& t = static_cast<_Task&>(*i);
+                        const Ticks d = t.wake - _ISR.CurrentTime;
+                        // Use >= instead of > so that we attach the task at the earliest
+                        // available slot, to minimize our computation.
+                        if (delta >= d) break;
                         insert = i;
                     }
                     
-                    _Attach(_ListSleep, static_cast<_ListRunSleep&>(_TaskCurr));
+                    // Attach `_TaskCurr` at the appropriate location in _ListSleep,
+                    // according to its wake time
+                    _Attach(*insert, static_cast<_ListRunSleep&>(*_TaskCurr));
+                    
+//                    for (_ListRunSleep* i=_ListSleep.next; i!=&_ListSleep; i=i->next) {
+//                        _Task& t = static_cast<_Task&>(*i);
+//                        Ticks d = t.wake - _ISR.CurrentTime;
+//                        if (delta > d) break;
+//                        insert = i;
+//                    }
+                    
+                    
+//                    _ListRunSleep* insert = &_ListSleep;
+//                    for (_ListRunSleep* i=_ListSleep.next; i!=&_ListSleep; i=i->next) {
+//                        _Task& t = static_cast<_Task&>(*i);
+//                        Ticks d = t.wake - _ISR.CurrentTime;
+//                        if (delta > d) break;
+//                        insert = i;
+//                    }
+                    
+                    
+                    
+                    // Find where to insert the task
+//                    _ListRunSleep* insert = &_ListSleep;
+//                    Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
+//                    for (_ListRunSleep* i=_ListSleep.next; i!=&_ListSleep; i=i->next) {
+//                        _Task& t = static_cast<_Task&>(*i);
+//                        Ticks d = t.wake - _ISR.CurrentTime;
+//                        if (delta > d) break;
+//                        insert = i;
+//                    }
+                    
+//                    _Attach(_ListSleep, static_cast<_ListRunSleep&>(_TaskCurr));
                     break;
                 }}
             }
