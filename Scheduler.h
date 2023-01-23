@@ -183,6 +183,36 @@ private:
         T* next = static_cast<T*>(this);
         bool empty() const { return next==this; }
         
+        
+//        template <typename T, typename T_Elm>
+//        static void _Attach(T& l, T_Elm& elm) {
+//            T& x = static_cast<T&>(elm);
+//            T& r = *l.next;
+//            x.prev = &l;
+//            x.next = &r;
+//            l.next = &x;
+//            r.prev = &x;
+//        }
+        
+        template <typename T_Elm>
+        void push(T_Elm& elm) {
+            T& x = static_cast<T&>(elm);
+            T& l = static_cast<T&>(*this);
+            T& r = *l.next;
+            x.prev = &l;
+            x.next = &r;
+            l.next = &x;
+            r.prev = &x;
+        }
+        
+        void pop() {
+            T& l = *prev;
+            T& r = *next;
+            l.next = &r;
+            r.prev = &l;
+            reset();
+        }
+        
         void reset() {
             prev = static_cast<T*>(this);
             next = static_cast<T*>(this);
@@ -207,6 +237,9 @@ private:
         void* sp = nullptr;
         Deadline wake = 0;
         _StackGuard& stackGuard;
+        
+        auto& listRunSleep() { return static_cast<_ListRunSleep&>(*this); }
+        auto& listChannel() { return static_cast<_ListChannel&>(*this); }
     };
     
 public:
@@ -291,13 +324,13 @@ public:
                 
                 case _SleepType::Indefinite: {
                     // Detach `_TaskCurr` from the runnable list of tasks to sleep it
-                    _Detach<_ListRunSleep>(*_TaskCurr);
+                    _TaskCurr->listRunSleep().pop();
                     break;
                 }
                 
                 case _SleepType::Deadline: {
                     // Detach `_TaskCurr` from the runnable list of tasks
-                    _Detach<_ListRunSleep>(*_TaskCurr);
+                    _TaskCurr->listRunSleep().pop();
                     
                     const Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
                     _ListRunSleep* insert = &_ListDeadline;
@@ -315,7 +348,9 @@ public:
                     
                     // Attach `_TaskCurr` at the appropriate location in _ListDeadline,
                     // according to its wake time
-                    _Attach(*insert, *_TaskCurr);
+//                    _Attach(*insert, *_TaskCurr);
+                    
+                    insert->push(*_TaskCurr);
                     break;
                 }}
             }
@@ -340,26 +375,27 @@ public:
         _TaskSwap();
     }
     
-    template <typename T, typename T_Elm>
-    static void _Detach(T_Elm& elm) {
-        T& x = static_cast<T&>(elm);
-        T& l = *x.prev;
-        T& r = *x.next;
-        l.next = &r;
-        r.prev = &l;
-        x.reset();
-    }
+//    template <typename T, typename T_Elm>
+//    static void _Detach(T_Elm& elm) {
+//        T& x = static_cast<T&>(elm);
+//        T& l = *x.prev;
+//        T& r = *x.next;
+//        l.next = &r;
+//        r.prev = &l;
+//        x.reset();
+//    }
+//    
+//    template <typename T, typename T_Elm>
+//    static void _Attach(T& l, T_Elm& elm) {
+//        T& x = static_cast<T&>(elm);
+//        T& r = *l.next;
+//        x.prev = &l;
+//        x.next = &r;
+//        l.next = &x;
+//        r.prev = &x;
+//    }
     
-    template <typename T, typename T_Elm>
-    static void _Attach(T& l, T_Elm& elm) {
-        T& x = static_cast<T&>(elm);
-        T& r = *l.next;
-        x.prev = &l;
-        x.next = &r;
-        l.next = &x;
-        r.prev = &x;
-    }
-    
+    #warning TODO: implement timeout
     // Buffered send
     template <
     typename T,
@@ -383,11 +419,12 @@ public:
                 return;
             }
             
-            _Attach(chan._senders, *_TaskCurr);
+            chan._senders.push(*_TaskCurr);
             _TaskSleep();
         }
     }
     
+    #warning TODO: implement timeout
     // Buffered receive
     template <
     typename T,
@@ -411,7 +448,7 @@ public:
                 return val;
             }
             
-            _Attach(chan._receivers, *_TaskCurr);
+            chan._receivers.push(*_TaskCurr);
             _TaskSleep();
         }
     }
@@ -493,10 +530,10 @@ private:
     static void _TaskWake(T& t) {
         _Task& task = static_cast<_Task&>(t);
         // Detach task from whatever lists it's a part of
-        _Detach<_ListRunSleep>(task);
-        _Detach<_ListChannel>(task);
+        task.listRunSleep().pop();
+        task.listChannel().pop();
         // Insert task into the beginning of the runnable list (_ListRun)
-        _Attach(_ListRun, task);
+        _ListRun.push(task);
     }
     
     // _TaskSwap(): swaps the current task and the saved task
