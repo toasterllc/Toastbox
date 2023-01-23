@@ -181,18 +181,8 @@ private:
     struct _List {
         T* prev = static_cast<T*>(this);
         T* next = static_cast<T*>(this);
+        
         bool empty() const { return next==this; }
-        
-        
-//        template <typename T, typename T_Elm>
-//        static void _Attach(T& l, T_Elm& elm) {
-//            T& x = static_cast<T&>(elm);
-//            T& r = *l.next;
-//            x.prev = &l;
-//            x.next = &r;
-//            l.next = &x;
-//            r.prev = &x;
-//        }
         
         template <typename T_Elm>
         void push(T_Elm& elm) {
@@ -210,19 +200,9 @@ private:
             T& r = *next;
             l.next = &r;
             r.prev = &l;
-            reset();
-        }
-        
-        void reset() {
             prev = static_cast<T*>(this);
             next = static_cast<T*>(this);
         }
-        
-//        _List() = default;
-//        _List(const _List& x) = delete;
-//        _List(_List&& x) = delete;
-//        
-//        void reset() { prev = this; next = this; }
     };
     
     struct _ListRunSleep : _List<_ListRunSleep> {};
