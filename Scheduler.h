@@ -181,25 +181,11 @@ private:
     struct _List {
         T* prev = static_cast<T*>(this);
         T* next = static_cast<T*>(this);
-        
         bool empty() const { return next==this; }
-        
-//        _List<T>* prev = this;
-//        _List<T>* next = this;
     };
     
-    struct _ListRunSleep : _List<_ListRunSleep> {
-//        _ListRunSleep* prev = this;
-//        _ListRunSleep* next = this;
-    };
-    
-//    using _ListRun = _ListRunSleep;
-//    using _ListSleep = _ListRunSleep;
-    
-    struct _ListChannel : _List<_ListChannel> {
-//        _ListChannel* prev = this;
-//        _ListChannel* next = this;
-    };
+    struct _ListRunSleep : _List<_ListRunSleep> {};
+    struct _ListChannel : _List<_ListChannel> {};
     
     using _StackGuard = uintptr_t[T_StackGuardCount];
     
@@ -207,7 +193,6 @@ private:
     
     struct _Task : _ListRunSleep, _ListChannel {
         _TaskFn run = nullptr;
-//        TaskFn cont = nullptr;
         void* sp = nullptr;
         Deadline wake = 0;
         _StackGuard& stackGuard;
@@ -231,46 +216,6 @@ public:
         _ListChannel _senders;
         _ListChannel _receivers;
     };
-    
-//    struct _SchedulerTask {
-//        static void Run() {
-//    //        for (volatile int i=0; i<5; i++) {
-//    //            
-//    //        }
-//            for (;;) {
-//                printf("_TaskA\n");
-//                _Scheduler::Sleep(_Scheduler::Ms(500));
-//    //            usleep(1000);
-//            }
-//        }
-//        
-//        // Task stack
-//        alignas(_SchedulerStackAlign*sizeof(void*))
-//        static inline uint8_t Stack[4096];
-//    };
-    
-//    // Start<task,fn>(): starts `task` running with `fn`
-//    template <typename T_Task, typename T_Fn>
-//    static void Start(T_Fn&& fn) {
-//        constexpr _Task& task = _GetTask<T_Task>();
-//        task.run = fn;
-//        task.cont = _TaskSwapInit;
-//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-//    }
-//    
-//    // Stop<task>(): stops `task`
-//    template <typename T_Task>
-//    static void Stop() {
-//        constexpr _Task& task = _GetTask<T_Task>();
-//        task.cont = _TaskNop;
-//    }
-//    
-//    // Running<task>(): returns whether `task` is running
-//    template <typename T_Task>
-//    static bool Running() {
-//        constexpr _Task& task = _GetTask<T_Task>();
-//        return task.cont != _TaskNop;
-//    }
     
     // Run(): run the tasks indefinitely
     [[noreturn]]
@@ -306,7 +251,6 @@ public:
             for (_ListRunSleep* i=_ListRun.next; i!=&_ListRun;) {
                 _TaskCurr = static_cast<_Task*>(i);
                 _TaskCurrSleepType = _SleepType::None;
-//                _TaskCurrSleep = false;
                 _TaskSwap();
                 
                 // Check stack guards
@@ -326,16 +270,6 @@ public:
                 case _SleepType::Indefinite: {
                     // Detach `_TaskCurr` from the runnable list of tasks to sleep it
                     _Detach(static_cast<_ListRunSleep&>(*_TaskCurr));
-//            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
-                    
-                    
-//                    // Sleep `_TaskCurr` indefinitely by detaching it from
-//                    // the runnable list of tasks
-//                    const _ListRunSleep& x = static_cast<_ListRunSleep&>(*_TaskCurr);
-//                    _ListRunSleep& l = *x.prev;
-//                    _ListRunSleep& r = *x.next;
-//                    l.next = &r;
-//                    r.prev = &l;
                     break;
                 }
                 
@@ -360,36 +294,6 @@ public:
                     // Attach `_TaskCurr` at the appropriate location in _ListDeadline,
                     // according to its wake time
                     _Attach(*insert, static_cast<_ListRunSleep&>(*_TaskCurr));
-                    
-//                    for (_ListRunSleep* i=_ListDeadline.next; i!=&_ListDeadline; i=i->next) {
-//                        _Task& t = static_cast<_Task&>(*i);
-//                        Ticks d = t.wake - _ISR.CurrentTime;
-//                        if (delta > d) break;
-//                        insert = i;
-//                    }
-                    
-                    
-//                    _ListRunSleep* insert = &_ListDeadline;
-//                    for (_ListRunSleep* i=_ListDeadline.next; i!=&_ListDeadline; i=i->next) {
-//                        _Task& t = static_cast<_Task&>(*i);
-//                        Ticks d = t.wake - _ISR.CurrentTime;
-//                        if (delta > d) break;
-//                        insert = i;
-//                    }
-                    
-                    
-                    
-                    // Find where to insert the task
-//                    _ListRunSleep* insert = &_ListDeadline;
-//                    Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
-//                    for (_ListRunSleep* i=_ListDeadline.next; i!=&_ListDeadline; i=i->next) {
-//                        _Task& t = static_cast<_Task&>(*i);
-//                        Ticks d = t.wake - _ISR.CurrentTime;
-//                        if (delta > d) break;
-//                        insert = i;
-//                    }
-                    
-//                    _Attach(_ListDeadline, static_cast<_ListRunSleep&>(_TaskCurr));
                     break;
                 }}
             }
@@ -405,25 +309,6 @@ public:
             if (_ListRun.empty()) {
                 T_Sleep();
             }
-            
-//            // Run tasks until the runnable list is empty
-//            while (_ListRun.next != &_ListRun) {
-////                _Task** tasksRunning = &_TasksRun;
-//                
-////                // End of task list
-////                *tasksRunning = nullptr;
-//            }
-//            
-//            // Reset _ISR.Wake now that we're assured that every task has been able to observe
-//            // _ISR.Wake=true while ints were disabled during the entire process.
-//            // (If ints were enabled, it's because we entered a task, and therefore
-//            // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
-//            // were entered -> ints are still disabled.)
-//            _ISR.Wake = false;
-//            
-//            // No work to do
-//            // Go to sleep!
-//            T_Sleep();
         }
     }
     
@@ -432,181 +317,6 @@ public:
         // Return to scheduler
         _TaskSwap();
     }
-    
-//    // Wait(fn): sleep current task until `fn` returns true.
-//    // `fn` must not cause any task to become runnable.
-//    // If it does, the scheduler may not notice that the task is runnable and
-//    // could go to sleep instead of running the task.
-//    //
-//    // If ints are disabled before calling Wait(), ints are guaranteed to have
-//    // remained disabled between `fn` executing and Wait() returning, and
-//    // therefore the condition that `fn` checks is guaranteed to remain true
-//    // after Wait() returns.
-//    //
-//    // Ints are disabled while calling `fn`
-//    template <typename T_Fn>
-//    static auto Wait(T_Fn&& fn) {
-//        // IntState:
-//        //   - ints must be disabled when calling `fn`
-//        //   - int state must be restored upon return because scheduler clobbers it
-//        IntState ints(false);
-//        for (;;) {
-//            const auto r = fn();
-//            if (!r) {
-//                _TaskSwap();
-//                continue;
-//            }
-//            return r;
-//        }
-//    }
-    
-//    // Wait(): sleep current task until `fn` returns true, or `ticks` have passed.
-//    // See Wait() function above for more info.
-//    template <typename T_Fn>
-//    static auto Wait(Ticks ticks, T_Fn&& fn) {
-//        // IntState:
-//        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
-//        //   - ints must be disabled because _WaitUntil() requires it
-//        //   - int state must be restored upon return because scheduler clobbers it
-//        IntState ints(false);
-//        const Deadline deadline = _ISR.CurrentTime+ticks+1;
-//        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
-//    }
-//    
-//    // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-//    //
-//    // For a deadline to be considered in the past, it must be in the range:
-//    //   [CurrentTime - TicksMax/2, CurrentTime]
-//    // For a deadline to be considered in the future, it must be in the range:
-//    //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
-//    //
-//    // where TicksMax is the maximum value that the `Ticks` type can hold.
-//    //
-//    // See comment in function body for more info regarding the deadline parameter.
-//    //
-//    // See Wait() function above for more info.
-//    template <typename T_Fn>
-//    static auto WaitUntil(Deadline deadline, T_Fn&& fn) {
-//        // IntState:
-//        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
-//        //   - ints must be disabled because _WaitUntil() requires it
-//        //   - int state must be restored upon return because scheduler clobbers it
-//        IntState ints(false);
-//        
-//        // Test whether `deadline` has already passed.
-//        //
-//        // Because _ISR.CurrentTime rolls over periodically, it's impossible to differentiate
-//        // between `deadline` passing versus merely being far in the future. (For example,
-//        // consider the case where time is tracked with a uint8_t: if Deadline=127 and
-//        // CurrentTime=128, either Deadline passed one tick ago, or Deadline will pass
-//        // 255 ticks in the future.)
-//        //
-//        // To solve this ambiguity, we require deadlines to be within
-//        // [-TicksMax/2, +TicksMax/2+1] of _ISR.CurrentTime (where TicksMax is the maximum
-//        // value that the `Ticks` type can hold), which allows us to employ the following
-//        // heuristic:
-//        //
-//        // For a deadline to be considered in the past, it must be in the range:
-//        //   [CurrentTime - TicksMax/2, CurrentTime]
-//        // For a deadline to be considered in the future, it must be in the range:
-//        //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
-//        //
-//        // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
-//        // can employ the above heuristic to determine whether `deadline` has already passed.
-//        constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
-//        const bool deadlinePassed = _ISR.CurrentTime-deadline <= TicksMax/2;
-//        if (deadlinePassed) {
-//            return std::optional<std::invoke_result_t<T_Fn>>{};
-//        }
-//        return _WaitUntil(deadline, std::forward<T_Fn>(fn));
-//    }
-//    
-//    // Wait<tasks>(): sleep current task until `tasks` all stop running
-//    template <typename... T_Tsks>
-//    static void Wait() {
-//        Wait([] { return (!Running<T_Tsks>() && ...); });
-//    }
-    
-    
-    
-    
-    
-//    // Unbuffered send
-//    template <
-//    typename T,
-//    size_t _T_Cap = T::Cap,
-//    typename std::enable_if_t<_T_Cap==0, int> = 0
-//    >
-//    static void Send(T& chan, const typename T::Type& val) {
-//        IntState ints(false);
-//        for (;;) {
-//            // If a reader is already waiting, set the value and wake it
-//            if (chan._reader) {
-//                chan._q[0] = val;
-//                _TaskWake(chan._reader);
-//                return;
-//            }
-//            
-//            // Otherwise, there's no reader waiting.
-//            // If a writer doesn't already exist, make ourself the writer and wait for the reader to wake us.
-//            if (!chan._writer) {
-//                chan._q[0] = val;
-//                chan._writer = _TaskCurr;
-//                _TaskSleep();
-//                chan._writer = nullptr;
-//                if (chan._writerNext) {
-//                    _TaskWake(chan._writerNext);
-//                }
-//                return;
-//            }
-//            
-//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writerNext slot
-//            // There's already a writer
-//            // Steal the chan._writerNext slot, and restore it when someone wakes us
-//            _Task* writerNext = chan._writerNext;
-//            chan._writerNext = _TaskCurr;
-//            _TaskSleep();
-//            chan._writerNext = writerNext;
-//        }
-//    }
-//    
-//    // Unbuffered receive
-//    template <
-//    typename T,
-//    size_t _T_Cap = T::Cap,
-//    typename std::enable_if_t<_T_Cap==0, int> = 0
-//    >
-//    static typename T::Type Recv(T& chan) {
-//        IntState ints(false);
-//        for (;;) {
-//            // If a writer is already waiting, get the value and wake it
-//            if (chan._writer) {
-//                _TaskWake(chan._writer);
-//                return chan._q[0];
-//            }
-//            
-//            // Otherwise, there's no writer waiting.
-//            // If a reader doesn't already exist, make ourself the reader and wait for the writer to wake us.
-//            if (!chan._reader) {
-//                chan._reader = _TaskCurr;
-//                _TaskSleep();
-//                chan._reader = nullptr;
-//                if (chan._readerNext) {
-//                    _TaskWake(chan._readerNext);
-//                }
-//                return;
-//            }
-//            
-//            
-//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _readerNext slot
-//            // There's already a reader
-//            // Steal the chan._readerNext slot, and restore it when someone wakes us
-//            _Task* readerNext = chan._readerNext;
-//            chan._readerNext = _TaskCurr;
-//            _TaskSleep();
-//            chan._readerNext = readerNext;
-//        }
-//    }
     
     template <typename T>
     static void _Detach(T& x) {
@@ -650,33 +360,6 @@ public:
             
             _Attach(chan._senders, static_cast<_ListChannel&>(*_TaskCurr));
             _TaskSleep();
-            
-////            _Attach()
-////            chan._senders = _TaskCurr;
-////            _TaskSleep();
-//            
-//            
-////            _Detach(static_cast<_ListRunSleep&>(_TaskCurr));
-////            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
-//            
-//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writer slot
-//            
-//            _TaskCurr->list.channel = chan._senders;
-//            chan._senders = _TaskCurr;
-//            bool ok = _TaskSleep();
-//            if (!ok) {
-//                // Timeout
-//                return;
-//            }
-//            
-//            
-//            
-//            
-//            // Steal the chan._writer slot, and restore it when someone wakes us
-//            _Task* writerPrev = chan._writer;
-//            chan._writer = _TaskCurr;
-//            _TaskSleep();
-//            chan._writer = writerPrev;
         }
     }
     
@@ -705,24 +388,8 @@ public:
             
             _Attach(chan._receivers, static_cast<_ListChannel&>(*_TaskCurr));
             _TaskSleep();
-            
-//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _reader slot
-//            // Steal the chan._reader slot, and restore it when someone wakes us
-//            _Task* readerPrev = chan._reader;
-//            chan._reader = _TaskCurr;
-//            _TaskSleep();
-//            chan._reader = readerPrev;
         }
     }
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
     static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
@@ -734,33 +401,7 @@ public:
         //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
         _TaskSleep(_ISR.CurrentTime+ticks+1);
-        
-//        const Deadline deadline = _ISR.CurrentTime+ticks+1;
-//        do {
-//            // Update _ISR.WakeDeadline
-//            _ProposeWakeDeadline(deadline);
-//            
-//            // Wait until we wake because _ISR.WakeDeadline expired (not necessarily
-//            // because of this task though)
-//            do _TaskSwap();
-//            while (!_ISR.Wake);
-//        
-//        } while (_ISR.CurrentTime != deadline);
     }
-    
-    // TODO: revisit -- this implementation is wrong because `T_Sleep()` will return upon any interrupt, not just our tick interrupt, so a tick won't necessarily have passed
-//    // Delay(ticks): delay current task for `ticks`, without allowing other tasks to run
-//    static void Delay(Ticks ticks) {
-//        _ISR.Delay = true;
-//        for (Ticks i=0;; i++) {
-//            T_Sleep();
-//            // Check break condition here so that:
-//            //   1. we sleep ticks+1 times, and
-//            //   2. ticks == ~0 works properly
-//            if (i == ticks) break;
-//        }
-//        _ISR.Delay = false;
-//    }
     
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
@@ -822,7 +463,6 @@ private:
         return true;
     }
     
-    #warning TODO: if the task was sleeping until a given deadline, do we need to do anything special here?
     // _TaskWake: insert the given task into the running list
     template <typename T>
     static void _TaskWake(T& t) {
@@ -832,45 +472,7 @@ private:
         _Detach(static_cast<_ListChannel&>(task));
         // Insert task into the beginning of the runnable list (_ListRun)
         _Attach(_ListRun, static_cast<_ListRunSleep&>(task));
-        
-//        _ListRun.next = task;
-//        
-//        task->next = ;
-//        _ListRun.next = 
-//        
-//        #warning TODO: implement
-//        // Insert task into the running list
-//        task->next = _TasksRun;
-//        _TasksRun = task;
     }
-    
-//    [[noreturn]]
-//    static void _TaskRun() {
-//        // Enable ints when initially entering a task.
-//        // We're not using an IntState here because this function never actually returns (since
-//        // we call _TaskSwap() at the end to return to the scheduler) and therefore we don't
-//        // need IntState's dtor cleanup behavior.
-//        IntState::Set(true);
-////        // Future invocations should invoke _TaskSwap
-////        _TaskCurr->cont = _TaskSwap;
-//        // Invoke task function
-//        _TaskCurr->run();
-//        // Tasks should never return
-//        Assert(false);
-//        
-////        // The task finished
-////        // Future invocations should do nothing
-////        _TaskCurr->cont = _TaskNop;
-//        // Return to scheduler
-////        for (;;) _TaskSwap();
-//    }
-    
-//    // _TaskSwapInit(): swap task in and jump to _TaskRun
-//    // Ints must be disabled
-//    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-//    static void _TaskSwapInit() {
-//        _SchedulerTaskSwap(_TaskRun, _TaskCurr->sp);
-//    }
     
     // _TaskSwap(): swaps the current task and the saved task
     static void _TaskSwap() {
@@ -895,38 +497,6 @@ private:
         // function ceiled too, we'd always sleep one more tick than needed.
         return us / T_UsPerTick;
     }
-    
-//    // _ProposeWakeDeadline(): update _ISR.WakeDeadline with a new deadline,
-//    // if it occurs before the existing deadline.
-//    // Ints must be disabled
-//    static void _ProposeWakeDeadline(Deadline deadline) {
-//        const Ticks wakeDelay = deadline-_ISR.CurrentTime;
-//        const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
-//        if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
-//            _ISR.WakeDeadline = deadline;
-//        }
-//    }
-//    
-//    // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-//    // Ints must be disabled
-//    template <typename T_Fn>
-//    static auto _WaitUntil(Deadline deadline, T_Fn&& fn) {
-//        do {
-//            const auto r = fn();
-//            if (r) {
-//                return std::make_optional(r);
-//            }
-//            
-//            // Update _ISR.WakeDeadline
-//            _ProposeWakeDeadline(deadline);
-//            
-//            // Next task
-//            _TaskSwap();
-//        } while (_ISR.CurrentTime != deadline);
-//        
-//        // Timeout
-//        return std::optional<std::invoke_result_t<T_Fn>>{};
-//    }
     
     // _GetTask(): returns the _Task& for the given T_Task
     template <typename T_Task>
@@ -953,7 +523,6 @@ private:
                     }
                 },
                 .run        = T_Tasks::Run,
-//                .cont       = _TaskSwapInit,
                 .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
                 .stackGuard = *(_StackGuard*)T_Tasks::Stack,
             }...,
@@ -971,11 +540,6 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-//    static inline struct {
-//        _TaskList run = &_Tasks[0];
-//        _TaskList sleep = nullptr;
-//    } _List;
-    
     enum class _SleepType {
         None,
         Indefinite,
@@ -984,7 +548,6 @@ private:
     
     static inline _Task* _TaskCurr = nullptr;
     static inline _SleepType _TaskCurrSleepType = _SleepType::None;
-//    static inline Deadline _TaskCurrSleepDeadline = 0;
     static inline _ListRunSleep _ListRun = {
         _List<_ListRunSleep>{
             .prev = static_cast<_ListRunSleep*>(&_Tasks[_TaskCount-1]),
