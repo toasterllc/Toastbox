@@ -171,6 +171,7 @@ class Scheduler {
 #define Assert(x) if (!(x)) T_Error(__LINE__)
 private:
     struct _Task;
+    using _TaskList = _Task*;
     
 public:
     using Ticks     = unsigned int;
@@ -189,10 +190,8 @@ public:
         size_t _w = 0;
         size_t _r = 0;
         bool _full = false;
-        _Task* _writer = nullptr;
-        _Task* _writerNext = nullptr;
-        _Task* _reader = nullptr;
-        _Task* _readerNext = nullptr;
+        _TaskList _senders = nullptr;
+        _TaskList _receivers = nullptr;
     };
     
 //    // Start<task,fn>(): starts `task` running with `fn`
@@ -249,9 +248,9 @@ public:
         IntState::Set(true);
         
         for (;;) {
-            while (_TasksRunning) {
-                _Task** tasksRunning = &_TasksRunning;
-                _TaskCurr = _TasksRunning;
+            while (_TasksRun) {
+                _Task** tasksRunning = &_TasksRun;
+                _TaskCurr = _TasksRun;
                 
                 do {
                     *tasksRunning = _TaskCurr;
@@ -493,6 +492,18 @@ public:
             }
             
             #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writer slot
+            
+            _TaskCurr->list.channel = chan._senders;
+            chan._senders = _TaskCurr;
+            bool ok = _TaskSleep();
+            if (!ok) {
+                // Timeout
+                return;
+            }
+            
+            
+            
+            
             // Steal the chan._writer slot, and restore it when someone wakes us
             _Task* writerPrev = chan._writer;
             chan._writer = _TaskCurr;
@@ -624,8 +635,10 @@ private:
 //        TaskFn cont = nullptr;
         void* sp = nullptr;
         Deadline wake = 0;
-        _Task* next = nullptr;
-        _Task* nextChannel = nullptr;
+        struct {
+            _TaskList runSleep = nullptr;
+            _TaskList channel = nullptr;
+        } list;
         _StackGuard& stackGuard;
     };
     
@@ -655,8 +668,8 @@ private:
     // _TaskWake: insert the given task into the running list
     static void _TaskWake(_Task* task) {
         // Insert task into the running list
-        task->next = _TasksRunning;
-        _TasksRunning = task;
+        task->next = _TasksRun;
+        _TasksRun = task;
     }
     
 //    [[noreturn]]
@@ -781,8 +794,11 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-    static inline _Task* _TasksRunning = &_Tasks[0];
-    static inline _Task* _TasksSleeping = nullptr;
+    static inline struct {
+        _TaskList run = &_Tasks[0];
+        _TaskList sleep = nullptr;
+    } _List;
+    
     static inline _Task* _TaskCurr = nullptr;
     static inline bool _TaskCurrRunning = false;
     
