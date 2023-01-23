@@ -643,7 +643,7 @@ public:
                 return;
             }
             
-            _Attach(chan._senders, *TaskCurr);
+            _Attach(chan._senders, *_TaskCurr);
             _TaskSleep();
             
 ////            _Attach()
