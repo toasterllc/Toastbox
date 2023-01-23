@@ -182,6 +182,17 @@ private:
         T* prev = static_cast<T*>(this);
         T* next = static_cast<T*>(this);
         bool empty() const { return next==this; }
+        
+        void reset() {
+            prev = static_cast<T*>(this);
+            next = static_cast<T*>(this);
+        }
+        
+//        _List() = default;
+//        _List(const _List& x) = delete;
+//        _List(_List&& x) = delete;
+//        
+//        void reset() { prev = this; next = this; }
     };
     
     struct _ListRunSleep : _List<_ListRunSleep> {};
@@ -216,6 +227,17 @@ public:
         _ListChannel _senders;
         _ListChannel _receivers;
     };
+    
+//    static void _CheckRunList() {
+//        bool ok = false;
+//        _ListRunSleep* test = _ListRun.next;
+//        for (int i=0; i<10; i++) {
+//            ok = (test == &_ListRun);
+//            if (ok) return;
+//            test = test->next;
+//        }
+//        abort();
+//    }
     
     // Run(): run the tasks indefinitely
     [[noreturn]]
@@ -325,6 +347,7 @@ public:
         T& r = *x.next;
         l.next = &r;
         r.prev = &l;
+        x.reset();
     }
     
     template <typename T, typename T_Elm>
