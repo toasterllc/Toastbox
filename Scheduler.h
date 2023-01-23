@@ -295,32 +295,53 @@ public:
         IntState::Set(true);
         
         for (;;) {
-            while (_ListRun.next != &_ListRun) {
-//                _Task** tasksRunning = &_TasksRun;
-                _TaskCurr = static_cast<_Task*>(_ListRun.next);
+            for (_ListRunSleep* i=_ListRun.next; i!=&_ListRun;) {
+                _TaskCurr = static_cast<_Task*>(i);
+                _TaskCurrSleepType = _SleepType::None;
+//                _TaskCurrSleep = false;
+                _TaskSwap();
                 
-                do {
-//                    *tasksRunning = _TaskCurr;
-//                    _TaskCurrRunning = true;
-                    _TaskSwap();
+                // Check stack guards
+                if constexpr ((bool)T_StackGuardCount) {
+                    _StackGuardCheck(_MainStackGuard);
+                    _StackGuardCheck(_TaskCurr->stackGuard);
+                }
+                
+                i = i->next;
+                switch (_TaskCurrSleepType) {
+                case _SleepType::None:
+                    break;
+                
+                case _SleepType::Indefinite: {
+                    // Sleep `_TaskCurr` indefinitely by detaching it from
+                    // the runnable list of tasks
+                    _Detach(static_cast<_ListRunSleep&>(_TaskCurr));
+//            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
                     
-                    // Check stack guards
-                    if constexpr ((bool)T_StackGuardCount) {
-                        _StackGuardCheck(_MainStackGuard);
-                        _StackGuardCheck(_TaskCurr->stackGuard);
+                    
+//                    // Sleep `_TaskCurr` indefinitely by detaching it from
+//                    // the runnable list of tasks
+//                    const _ListRunSleep& x = static_cast<_ListRunSleep&>(*_TaskCurr);
+//                    _ListRunSleep& l = *x.prev;
+//                    _ListRunSleep& r = *x.next;
+//                    l.next = &r;
+//                    r.prev = &l;
+                    break;
+                }
+                
+                case _SleepType::Deadline: {
+                    _Detach(static_cast<_ListRunSleep&>(*_TaskCurr));
+                    
+                    // Find where to insert the task
+                    _ListRunSleep* insert = &_ListSleep;
+                    for (_ListRunSleep* i=_ListSleep.next; i!=&_ListSleep; i=i->next) {
+                        _Task& t = static_cast<_Task&>(*i);
+                        if (_TaskCurr->wake )
                     }
                     
-//                    if (_TaskCurrRunning) {
-//                        tasksRunning = &_TaskCurr->next;
-//                    }
-                    
-                    _TaskCurr = static_cast<_Task*>(((_ListRunSleep&)_TaskCurr).next);
-                    
-//                    _TaskCurr = static_cast<_Task*>(((_ListRunSleep&)_TaskCurr).next);
-                } while (_TaskCurr);
-                
-//                // End of task list
-//                *tasksRunning = nullptr;
+                    _Attach(_ListSleep, static_cast<_ListRunSleep&>(_TaskCurr));
+                    break;
+                }}
             }
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
@@ -330,9 +351,29 @@ public:
             // were entered -> ints are still disabled.)
             _ISR.Wake = false;
             
-            // No work to do
-            // Go to sleep!
-            T_Sleep();
+            // If `_ListRun` is empty (ie there are no runnable tasks), go to sleep
+            if (_ListRun.next == &_ListRun) {
+                T_Sleep();
+            }
+            
+//            // Run tasks until the runnable list is empty
+//            while (_ListRun.next != &_ListRun) {
+////                _Task** tasksRunning = &_TasksRun;
+//                
+////                // End of task list
+////                *tasksRunning = nullptr;
+//            }
+//            
+//            // Reset _ISR.Wake now that we're assured that every task has been able to observe
+//            // _ISR.Wake=true while ints were disabled during the entire process.
+//            // (If ints were enabled, it's because we entered a task, and therefore
+//            // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
+//            // were entered -> ints are still disabled.)
+//            _ISR.Wake = false;
+//            
+//            // No work to do
+//            // Go to sleep!
+//            T_Sleep();
         }
     }
     
@@ -517,6 +558,23 @@ public:
 //        }
 //    }
     
+    template <typename T>
+    static void _Detach(T& x) {
+        T& l = *x.prev;
+        T& r = *x.next;
+        l.next = &r;
+        r.prev = &l;
+    }
+    
+    template <typename T>
+    static void _Attach(T& l, T& x) {
+        T& r = *_ListRun.next;
+        x.prev = &l;
+        x.next = &r;
+        l.next = &x;
+        r.prev = &x;
+    }
+    
     // Buffered send
     template <
     typename T,
@@ -539,6 +597,9 @@ public:
                 }
                 return;
             }
+            
+//            _Detach(static_cast<_ListRunSleep&>(_TaskCurr));
+//            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
             
             #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writer slot
             
@@ -611,8 +672,7 @@ public:
         //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR
         //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
-        _TaskCurr->wake = _ISR.CurrentTime+ticks+1;
-        _TaskSleep();
+        _TaskSleep(_ISR.CurrentTime+ticks+1);
         
 //        const Deadline deadline = _ISR.CurrentTime+ticks+1;
 //        do {
@@ -683,18 +743,39 @@ private:
         }
     }
     
-    // _TaskSleep(): mark current task as sleeping and return to scheduler
+    // _TaskSleep(): sleep current task indefinitely
     static void _TaskSleep() {
-//        // Notify scheduler that this task is no longer running
-//        _TaskCurrRunning = false;
+        _TaskCurrSleepType = _SleepType::Indefinite;
         // Return to scheduler
         _TaskSwap();
+    }
+    
+    // _TaskSleep(deadline): sleep current task until `wake`.
+    // Returns true if the task awoke early due to another task waking it.
+    static bool _TaskSleep(Deadline wake) {
+        _TaskCurrSleepType = _SleepType::Deadline;
+        _TaskCurr->wake = wake;
+        // Return to scheduler
+        _TaskSwap();
+        #warning TODO: implement real return value
+        return true;
     }
     
     #warning TODO: if the task was sleeping until a given deadline, do we need to do anything special here?
     // _TaskWake: insert the given task into the running list
     static void _TaskWake(_Task* task) {
-        #warning TODO: implement
+        // Detach task from whatever lists it's a part of
+        _Detach(static_cast<_ListRunSleep&>(*task));
+        _Detach(static_cast<_ListChannel&>(*task));
+        // Insert task into the beginning of the runnable list (_ListRun)
+        _Attach(_ListRun, static_cast<_ListRunSleep&>(*task));
+        
+//        _ListRun.next = task;
+//        
+//        task->next = ;
+//        _ListRun.next = 
+//        
+//        #warning TODO: implement
 //        // Insert task into the running list
 //        task->next = _TasksRun;
 //        _TasksRun = task;
@@ -752,17 +833,17 @@ private:
         return us / T_UsPerTick;
     }
     
-    // _ProposeWakeDeadline(): update _ISR.WakeDeadline with a new deadline,
-    // if it occurs before the existing deadline.
-    // Ints must be disabled
-    static void _ProposeWakeDeadline(Deadline deadline) {
-        const Ticks wakeDelay = deadline-_ISR.CurrentTime;
-        const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
-        if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
-            _ISR.WakeDeadline = deadline;
-        }
-    }
-    
+//    // _ProposeWakeDeadline(): update _ISR.WakeDeadline with a new deadline,
+//    // if it occurs before the existing deadline.
+//    // Ints must be disabled
+//    static void _ProposeWakeDeadline(Deadline deadline) {
+//        const Ticks wakeDelay = deadline-_ISR.CurrentTime;
+//        const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
+//        if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
+//            _ISR.WakeDeadline = deadline;
+//        }
+//    }
+//    
 //    // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
 //    // Ints must be disabled
 //    template <typename T_Fn>
@@ -803,8 +884,8 @@ private:
         return {
             _Task{
                 _ListRunSleep{
-                    .prev = (T_Idx!=0 ? &_Tasks[T_Idx-1] : &_ListRun),
-                    .next = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx+1] : &_ListRun),
+                    .prev = (T_Idx==0 ?             &_ListRun : &_Tasks[T_Idx-1]),
+                    .next = (T_Idx==_TaskCount-1 ?  &_ListRun : &_Tasks[T_Idx+1]),
                 },
                 .run        = T_Tasks::Run,
 //                .cont       = _TaskSwapInit,
@@ -830,8 +911,15 @@ private:
 //        _TaskList sleep = nullptr;
 //    } _List;
     
+    enum class _SleepType {
+        None,
+        Indefinite,
+        Deadline,
+    };
+    
     static inline _Task* _TaskCurr = nullptr;
-//    static inline bool _TaskCurrRunning = false;
+    static inline _SleepType _TaskCurrSleepType = _SleepType::None;
+//    static inline Deadline _TaskCurrSleepDeadline = 0;
     static inline _ListRunSleep _ListRun = {
         .prev = static_cast<_ListRunSleep*>(&_Tasks[_TaskCount-1]),
         .next = static_cast<_ListRunSleep*>(&_Tasks[0]),
