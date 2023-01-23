@@ -308,6 +308,9 @@ public:
                 }
                 
                 i = i->next;
+                
+                // Disable interrupts while we update our data structures
+                IntState ints(false);
                 switch (_TaskCurrSleepType) {
                 case _SleepType::None:
                     break;
@@ -315,7 +318,7 @@ public:
                 case _SleepType::Indefinite: {
                     // Sleep `_TaskCurr` indefinitely by detaching it from
                     // the runnable list of tasks
-                    _Detach(static_cast<_ListRunSleep&>(_TaskCurr));
+                    _Detach(static_cast<_ListRunSleep&>(*_TaskCurr));
 //            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
                     
                     
@@ -334,9 +337,12 @@ public:
                     
                     // Find where to insert the task
                     _ListRunSleep* insert = &_ListSleep;
+                    Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
                     for (_ListRunSleep* i=_ListSleep.next; i!=&_ListSleep; i=i->next) {
                         _Task& t = static_cast<_Task&>(*i);
-                        if (_TaskCurr->wake )
+                        Ticks d = t.wake - _ISR.CurrentTime;
+                        if (delta > d) break;
+                        insert = i;
                     }
                     
                     _Attach(_ListSleep, static_cast<_ListRunSleep&>(_TaskCurr));
