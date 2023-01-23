@@ -182,7 +182,7 @@ private:
         T* prev = static_cast<T*>(this);
         T* next = static_cast<T*>(this);
         
-        bool empty() const { return prev == next; }
+        bool empty() const { return next==this; }
         
 //        _List<T>* prev = this;
 //        _List<T>* next = this;
