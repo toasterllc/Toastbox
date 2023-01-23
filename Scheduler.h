@@ -177,23 +177,28 @@ public:
 private:
     struct _Task;
     
-//    template <typename T>
-//    struct _List {
-//        T* prev = this;
-//        T* next = this;
-//    };
+    template <typename T>
+    struct _List {
+        T* prev = static_cast<T*>(this);
+        T* next = static_cast<T*>(this);
+        
+        bool empty() const { return prev == next; }
+        
+//        _List<T>* prev = this;
+//        _List<T>* next = this;
+    };
     
-    struct _ListRunSleep {
-        _ListRunSleep* prev = this;
-        _ListRunSleep* next = this;
+    struct _ListRunSleep : _List<_ListRunSleep> {
+//        _ListRunSleep* prev = this;
+//        _ListRunSleep* next = this;
     };
     
 //    using _ListRun = _ListRunSleep;
 //    using _ListSleep = _ListRunSleep;
     
-    struct _ListChannel {
-        _ListChannel* prev = this;
-        _ListChannel* next = this;
+    struct _ListChannel : _List<_ListChannel> {
+//        _ListChannel* prev = this;
+//        _ListChannel* next = this;
     };
     
     using _StackGuard = uintptr_t[T_StackGuardCount];
@@ -218,7 +223,7 @@ public:
         using Type = T_Type;
         static constexpr size_t Cap = T_Cap;
         
-    private:
+//    private:
         T_Type _q[std::max((size_t)1, T_Cap)];
         size_t _w = 0;
         size_t _r = 0;
@@ -397,7 +402,7 @@ public:
             _ISR.Wake = false;
             
             // If `_ListRun` is empty (ie there are no runnable tasks), go to sleep
-            if (_ListRun.next == &_ListRun) {
+            if (_ListRun.empty()) {
                 T_Sleep();
             }
             
@@ -613,7 +618,7 @@ public:
     
     template <typename T>
     static void _Attach(T& l, T& x) {
-        T& r = *_ListRun.next;
+        T& r = *l.next;
         x.prev = &l;
         x.next = &r;
         l.next = &x;
@@ -636,14 +641,14 @@ public:
                 if (chan._w == T::Cap) chan._w = 0;
                 if (chan._w == chan._r) chan._full = true;
                 
-                // If there's a reader, wake it
-                if (chan._reader) {
-                    _TaskWake(chan._reader);
+                // If there's a receiver, wake it
+                if (!chan._receivers.empty()) {
+                    _TaskWake(*static_cast<_Task*>(chan._receivers.next));
                 }
                 return;
             }
             
-            _Attach(chan._senders, *_TaskCurr);
+            _Attach(chan._senders, static_cast<_ListChannel&>(*_TaskCurr));
             _TaskSleep();
             
 ////            _Attach()
@@ -691,19 +696,22 @@ public:
                 if (chan._r == T::Cap) chan._r = 0;
                 chan._full = false;
                 
-                // If there's a writer, wake it
-                if (chan._writer) {
-                    _TaskWake(chan._writer);
+                // If there's a sender, wake it
+                if (!chan._senders.empty()) {
+                    _TaskWake(*static_cast<_Task*>(chan._senders.next));
                 }
                 return val;
             }
             
-            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _reader slot
-            // Steal the chan._reader slot, and restore it when someone wakes us
-            _Task* readerPrev = chan._reader;
-            chan._reader = _TaskCurr;
+            _Attach(chan._receivers, static_cast<_ListChannel&>(*_TaskCurr));
             _TaskSleep();
-            chan._reader = readerPrev;
+            
+//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _reader slot
+//            // Steal the chan._reader slot, and restore it when someone wakes us
+//            _Task* readerPrev = chan._reader;
+//            chan._reader = _TaskCurr;
+//            _TaskSleep();
+//            chan._reader = readerPrev;
         }
     }
     
@@ -816,12 +824,12 @@ private:
     
     #warning TODO: if the task was sleeping until a given deadline, do we need to do anything special here?
     // _TaskWake: insert the given task into the running list
-    static void _TaskWake(_Task* task) {
+    static void _TaskWake(_Task& task) {
         // Detach task from whatever lists it's a part of
-        _Detach(static_cast<_ListRunSleep&>(*task));
-        _Detach(static_cast<_ListChannel&>(*task));
+        _Detach(static_cast<_ListRunSleep&>(task));
+        _Detach(static_cast<_ListChannel&>(task));
         // Insert task into the beginning of the runnable list (_ListRun)
-        _Attach(_ListRun, static_cast<_ListRunSleep&>(*task));
+        _Attach(_ListRun, static_cast<_ListRunSleep&>(task));
         
 //        _ListRun.next = task;
 //        
@@ -937,8 +945,10 @@ private:
         return {
             _Task{
                 _ListRunSleep{
-                    .prev = (T_Idx==0 ?             &_ListRun : &_Tasks[T_Idx-1]),
-                    .next = (T_Idx==_TaskCount-1 ?  &_ListRun : &_Tasks[T_Idx+1]),
+                    _List<_ListRunSleep>{
+                        .prev = (T_Idx==0 ?             &_ListRun : &_Tasks[T_Idx-1]),
+                        .next = (T_Idx==_TaskCount-1 ?  &_ListRun : &_Tasks[T_Idx+1]),
+                    }
                 },
                 .run        = T_Tasks::Run,
 //                .cont       = _TaskSwapInit,
@@ -974,8 +984,10 @@ private:
     static inline _SleepType _TaskCurrSleepType = _SleepType::None;
 //    static inline Deadline _TaskCurrSleepDeadline = 0;
     static inline _ListRunSleep _ListRun = {
-        .prev = static_cast<_ListRunSleep*>(&_Tasks[_TaskCount-1]),
-        .next = static_cast<_ListRunSleep*>(&_Tasks[0]),
+        _List<_ListRunSleep>{
+            .prev = static_cast<_ListRunSleep*>(&_Tasks[_TaskCount-1]),
+            .next = static_cast<_ListRunSleep*>(&_Tasks[0]),
+        },
     };
     static inline _ListRunSleep _ListDeadline;
     
