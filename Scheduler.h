@@ -643,30 +643,35 @@ public:
                 return;
             }
             
-            
-            
-            
-//            _Detach(static_cast<_ListRunSleep&>(_TaskCurr));
-//            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
-            
-            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writer slot
-            
-            _TaskCurr->list.channel = chan._senders;
-            chan._senders = _TaskCurr;
-            bool ok = _TaskSleep();
-            if (!ok) {
-                // Timeout
-                return;
-            }
-            
-            
-            
-            
-            // Steal the chan._writer slot, and restore it when someone wakes us
-            _Task* writerPrev = chan._writer;
-            chan._writer = _TaskCurr;
+            _Attach(chan._senders, *TaskCurr);
             _TaskSleep();
-            chan._writer = writerPrev;
+            
+////            _Attach()
+////            chan._senders = _TaskCurr;
+////            _TaskSleep();
+//            
+//            
+////            _Detach(static_cast<_ListRunSleep&>(_TaskCurr));
+////            _Attach(_ListRun, static_cast<_ListRunSleep&>(_TaskCurr));
+//            
+//            #warning TODO: we should the _Task linked list so that if a _Task bails from reading/writing (due to a timeout), it can remove itself from the linked list. with the current solution, the bailing task can't remove itself if another task 'steals' the _writer slot
+//            
+//            _TaskCurr->list.channel = chan._senders;
+//            chan._senders = _TaskCurr;
+//            bool ok = _TaskSleep();
+//            if (!ok) {
+//                // Timeout
+//                return;
+//            }
+//            
+//            
+//            
+//            
+//            // Steal the chan._writer slot, and restore it when someone wakes us
+//            _Task* writerPrev = chan._writer;
+//            chan._writer = _TaskCurr;
+//            _TaskSleep();
+//            chan._writer = writerPrev;
         }
     }
     
