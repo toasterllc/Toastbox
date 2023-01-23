@@ -169,13 +169,43 @@ template <
 >
 class Scheduler {
 #define Assert(x) if (!(x)) T_Error(__LINE__)
-private:
-    struct _Task;
-    using _TaskList = _Task*;
-    
+
 public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
+
+private:
+    struct _Task;
+    
+//    template <typename T>
+//    struct _List {
+//        T* prev = this;
+//        T* next = this;
+//    };
+    
+    struct _ListRunSleep {
+        _ListRunSleep* prev = this;
+        _ListRunSleep* next = this;
+    };
+    
+    struct _ListChannel {
+        _ListChannel* prev = this;
+        _ListChannel* next = this;
+    };
+    
+    using _StackGuard = uintptr_t[T_StackGuardCount];
+    
+    using _TaskFn = void(*)();
+    
+    struct _Task : _ListRunSleep, _ListChannel {
+        _TaskFn run = nullptr;
+//        TaskFn cont = nullptr;
+        void* sp = nullptr;
+        Deadline wake = 0;
+        _StackGuard& stackGuard;
+    };
+    
+public:
     
     // MARK: - Channel
     
@@ -190,9 +220,26 @@ public:
         size_t _w = 0;
         size_t _r = 0;
         bool _full = false;
-        _TaskList _senders = nullptr;
-        _TaskList _receivers = nullptr;
+        _ListChannel _senders;
+        _ListChannel _receivers;
     };
+    
+//    struct _SchedulerTask {
+//        static void Run() {
+//    //        for (volatile int i=0; i<5; i++) {
+//    //            
+//    //        }
+//            for (;;) {
+//                printf("_TaskA\n");
+//                _Scheduler::Sleep(_Scheduler::Ms(500));
+//    //            usleep(1000);
+//            }
+//        }
+//        
+//        // Task stack
+//        alignas(_SchedulerStackAlign*sizeof(void*))
+//        static inline uint8_t Stack[4096];
+//    };
     
 //    // Start<task,fn>(): starts `task` running with `fn`
 //    template <typename T_Task, typename T_Fn>
@@ -209,13 +256,13 @@ public:
 //        constexpr _Task& task = _GetTask<T_Task>();
 //        task.cont = _TaskNop;
 //    }
-    
-    // Running<task>(): returns whether `task` is running
-    template <typename T_Task>
-    static bool Running() {
-        constexpr _Task& task = _GetTask<T_Task>();
-        return task.cont != _TaskNop;
-    }
+//    
+//    // Running<task>(): returns whether `task` is running
+//    template <typename T_Task>
+//    static bool Running() {
+//        constexpr _Task& task = _GetTask<T_Task>();
+//        return task.cont != _TaskNop;
+//    }
     
     // Run(): run the tasks indefinitely
     [[noreturn]]
@@ -248,13 +295,13 @@ public:
         IntState::Set(true);
         
         for (;;) {
-            while (_TasksRun) {
-                _Task** tasksRunning = &_TasksRun;
-                _TaskCurr = _TasksRun;
+            while (_ListRun.next != &_ListRun) {
+//                _Task** tasksRunning = &_TasksRun;
+                _TaskCurr = static_cast<_Task*>(_ListRun.next);
                 
                 do {
-                    *tasksRunning = _TaskCurr;
-                    _TaskCurrRunning = true;
+//                    *tasksRunning = _TaskCurr;
+//                    _TaskCurrRunning = true;
                     _TaskSwap();
                     
                     // Check stack guards
@@ -263,15 +310,17 @@ public:
                         _StackGuardCheck(_TaskCurr->stackGuard);
                     }
                     
-                    if (_TaskCurrRunning) {
-                        tasksRunning = &_TaskCurr->next;
-                    }
+//                    if (_TaskCurrRunning) {
+//                        tasksRunning = &_TaskCurr->next;
+//                    }
                     
-                    _TaskCurr = _TaskCurr->next;
+                    _TaskCurr = static_cast<_Task*>(((_ListRunSleep&)_TaskCurr).next);
+                    
+//                    _TaskCurr = static_cast<_Task*>(((_ListRunSleep&)_TaskCurr).next);
                 } while (_TaskCurr);
                 
-                // End of task list
-                *tasksRunning = nullptr;
+//                // End of task list
+//                *tasksRunning = nullptr;
             }
             
             // Reset _ISR.Wake now that we're assured that every task has been able to observe
@@ -618,29 +667,7 @@ public:
 private:
     // MARK: - Types
     
-    using _TaskFn = void(*)();
-    
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
-    using _StackGuard = uintptr_t[T_StackGuardCount];
-    
-    template <typename T>
-    class _Link {
-    public:
-        T*& prev = next;
-        T* next = nullptr;
-    };
-    
-    struct _Task {
-        _TaskFn run = nullptr;
-//        TaskFn cont = nullptr;
-        void* sp = nullptr;
-        Deadline wake = 0;
-        struct {
-            _TaskList runSleep = nullptr;
-            _TaskList channel = nullptr;
-        } list;
-        _StackGuard& stackGuard;
-    };
     
     // MARK: - Stack Guard
     
@@ -658,8 +685,8 @@ private:
     
     // _TaskSleep(): mark current task as sleeping and return to scheduler
     static void _TaskSleep() {
-        // Notify scheduler that this task is no longer running
-        _TaskCurrRunning = false;
+//        // Notify scheduler that this task is no longer running
+//        _TaskCurrRunning = false;
         // Return to scheduler
         _TaskSwap();
     }
@@ -667,9 +694,10 @@ private:
     #warning TODO: if the task was sleeping until a given deadline, do we need to do anything special here?
     // _TaskWake: insert the given task into the running list
     static void _TaskWake(_Task* task) {
-        // Insert task into the running list
-        task->next = _TasksRun;
-        _TasksRun = task;
+        #warning TODO: implement
+//        // Insert task into the running list
+//        task->next = _TasksRun;
+//        _TasksRun = task;
     }
     
 //    [[noreturn]]
@@ -774,10 +802,13 @@ private:
     static constexpr std::array<_Task,_TaskCount> _TasksGet(std::integer_sequence<size_t, T_Idx...>) {
         return {
             _Task{
+                _ListRunSleep{
+                    .prev = (T_Idx!=0 ? &_Tasks[T_Idx-1] : &_ListRun),
+                    .next = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx+1] : &_ListRun),
+                },
                 .run        = T_Tasks::Run,
 //                .cont       = _TaskSwapInit,
                 .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
-                .next       = (T_Idx!=_TaskCount-1 ? &_Tasks[T_Idx+1] : nullptr),
                 .stackGuard = *(_StackGuard*)T_Tasks::Stack,
             }...,
         };
@@ -794,13 +825,18 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-    static inline struct {
-        _TaskList run = &_Tasks[0];
-        _TaskList sleep = nullptr;
-    } _List;
+//    static inline struct {
+//        _TaskList run = &_Tasks[0];
+//        _TaskList sleep = nullptr;
+//    } _List;
     
     static inline _Task* _TaskCurr = nullptr;
-    static inline bool _TaskCurrRunning = false;
+//    static inline bool _TaskCurrRunning = false;
+    static inline _ListRunSleep _ListRun = {
+        .prev = static_cast<_ListRunSleep*>(&_Tasks[_TaskCount-1]),
+        .next = static_cast<_ListRunSleep*>(&_Tasks[0]),
+    };
+    static inline _ListRunSleep _ListSleep;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
