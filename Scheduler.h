@@ -450,23 +450,35 @@ public:
         //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR
         //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
-        _TaskSleep(_ISR.CurrentTime+ticks+1);
+        _TaskSleep(_ISR.CurrentTime+ticks);
     }
     
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
-        // Don't increment time if there's an existing _ISR.Wake signal that hasn't been consumed.
-        // This is necessary so that we don't miss any ticks, which could cause a task wakeup to be missed.
-        if (_ISR.Wake) return true;
-        
-        _ISR.CurrentTime++;
-        if (_ISR.CurrentTime == _ISR.WakeDeadline) {
-            _ISR.Wake = true;
-            return true;
+        bool woke = false;
+        // Wake tasks matching the current tick.
+        // We wake tasks for deadline `N` only when updating CurrentTime to
+        // `N+1`, as this signifies that the full tick for `N` has elapsed.
+        //
+        // Put another way, we increment CurrentTime _after_ checking for
+        // tasks matching `CurrentTime`.
+        //
+        // Put another-another way, Sleep() assigns the tasks'
+        // wakeDeadline to CurrentTime+ticks (not CurrentTime+ticks+1), and
+        // our logic here matches that math to ensure that we sleep at
+        // least `ticks`.
+        for (_ListRunSleep* i=_ListDeadline.next; i!=&_ListDeadline;) {
+            _Task& task = static_cast<_Task&>(*i);
+            if (task.wakeDeadline != _ISR.CurrentTime) break;
+            // Update `i` before we potentially wake the task, because
+            // waking the task disrupts the linked list.
+            i = i->next;
+            _TaskWake(task, _WakeReason::Deadline);
+            woke = true;
         }
-        
-        return false;
+        _ISR.CurrentTime++;
+        return woke;
     }
     
     static Ticks CurrentTime() {
