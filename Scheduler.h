@@ -486,6 +486,8 @@ public:
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
+        if (_ISR.TickPause) return false;
+        
         bool woke = false;
         // Wake tasks matching the current tick.
         // We wake tasks for deadline `N` only when updating CurrentTime to
@@ -748,7 +750,7 @@ private:
     static volatile inline struct {
         Ticks CurrentTime = 0;
         Deadline WakeDeadline = 0;
-        bool Wake = false;
+        bool TickPause = false;
     } _ISR;
 #undef Assert
 };
