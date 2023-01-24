@@ -381,64 +381,65 @@ public:
 //        r.prev = &x;
 //    }
     
+    template <typename T>
+    static void Send(T& chan, const typename T::Type& val) {
+        Send(chan, val, std::nullopt);
+    }
+    
     #warning TODO: implement timeout
     // Buffered send
-    template <
-    typename T,
-    size_t _T_Cap = T::Cap,
-    typename std::enable_if_t<_T_Cap!=0, int> = 0
-    >
-    static void Send(T& chan, const typename T::Type& val) {
+    template <typename T>
+    static bool Send(T& chan, const typename T::Type& val, std::optional<Deadline> deadline) {
         IntState ints(false);
-        for (;;) {
-            // If the channel has an available slot, add the value to the queue
-            if (!chan._full) {
-                chan._q[chan._w] = val;
-                chan._w++;
-                if (chan._w == T::Cap) chan._w = 0;
-                if (chan._w == chan._r) chan._full = true;
-                
-                // If there's a receiver, wake it
-                if (!chan._receivers.empty()) {
-                    _TaskWake(*chan._receivers.next, _WakeReason::Event);
-                }
-                return;
-            }
-            
+        
+        // Wait for the channel to have an available slot, or for the deadline to occur
+        while (chan._full) {
             // Add ourself as a sender
             chan._senders.push(*_TaskCurr);
-            _TaskSleep();
+            _TaskSleep(deadline);
         }
+        
+        chan._q[chan._w] = val;
+        chan._w++;
+        if (chan._w == T::Cap) chan._w = 0;
+        if (chan._w == chan._r) chan._full = true;
+        
+        // If there's a receiver, wake it
+        if (!chan._receivers.empty()) {
+            _TaskWake(*chan._receivers.next, _WakeReason::Event);
+        }
+        
+        return true;
+    }
+    
+    template <typename T>
+    static typename T::Type Recv(T& chan) {
+        return *Recv(chan, std::nullopt);
     }
     
     #warning TODO: implement timeout
     // Buffered receive
-    template <
-    typename T,
-    size_t _T_Cap = T::Cap,
-    typename std::enable_if_t<_T_Cap!=0, int> = 0
-    >
-    static typename T::Type Recv(T& chan) {
+    template <typename T>
+    static std::optional<typename T::Type> Recv(T& chan, std::optional<Deadline> deadline) {
         IntState ints(false);
-        for (;;) {
-            // If the channel has available data, pop the value from the queue
-            if (chan._w!=chan._r || chan._full) {
-                const typename T::Type& val = chan._q[chan._r];
-                chan._r++;
-                if (chan._r == T::Cap) chan._r = 0;
-                chan._full = false;
-                
-                // If there's a sender, wake it
-                if (!chan._senders.empty()) {
-                    _TaskWake(*chan._senders.next, _WakeReason::Event);
-                }
-                return val;
-            }
-            
+        
+        // Wait for the channel to have available data, or for the deadline to occur
+        while (chan._w==chan._r && !chan._full) {
             // Add ourself as a receiver
             chan._receivers.push(*_TaskCurr);
-            _TaskSleep();
+            _TaskSleep(deadline);
         }
+        
+        const typename T::Type& val = chan._q[chan._r];
+        chan._r++;
+        if (chan._r == T::Cap) chan._r = 0;
+        chan._full = false;
+        
+        // If there's a sender, wake it
+        if (!chan._senders.empty()) {
+            _TaskWake(*chan._senders.next, _WakeReason::Event);
+        }
+        return val;
     }
     
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
@@ -507,22 +508,24 @@ private:
         }
     }
     
-    // _TaskSleep(): sleep current task indefinitely
-    static void _TaskSleep() {
-        _TaskCurrSleepType = _SleepType::Indefinite;
-        // Return to scheduler
-        _TaskSwap();
-    }
-    
-    // _TaskSleep(deadline): sleep current task until `wake`.
-    // Returns true if the task awoke early because another task woke it.
-    static _WakeReason _TaskSleep(Deadline wake) {
-        _TaskCurrSleepType = _SleepType::Deadline;
-        _TaskCurr->wakeDeadline = wake;
+    // _TaskSleep(): sleep current task either indefinitely, or until a deadline arrives
+    static _WakeReason _TaskSleep(std::optional<Deadline> deadline=std::nullopt) {
+        _TaskCurrSleepType = (deadline ? _SleepType::Deadline : _SleepType::Indefinite);
+        _TaskCurr->wakeDeadline = deadline.value_or(0);
         // Return to scheduler
         _TaskSwap();
         return _TaskCurr->wakeReason;
     }
+    
+//    // _TaskSleep(deadline): sleep current task until `wake`.
+//    // Returns true if the task awoke early because another task woke it.
+//    static _WakeReason _TaskSleep(Deadline wake) {
+//        _TaskCurrSleepType = _SleepType::Deadline;
+//        _TaskCurr->wakeDeadline = wake;
+//        // Return to scheduler
+//        _TaskSwap();
+//        return _TaskCurr->wakeReason;
+//    }
     
     // _TaskWake: insert the given task into the running list
     template <typename T>
