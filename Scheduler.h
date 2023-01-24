@@ -205,8 +205,9 @@ private:
         }
     };
     
-    struct _ListRunSleep : _List<_ListRunSleep> {};
-    struct _ListChannel : _List<_ListChannel> {};
+    struct _ListRunType : _List<_ListRunType> {};
+    struct _ListDeadlineType : _List<_ListDeadlineType> {};
+    struct _ListChannelType : _List<_ListChannelType> {};
     
     using _StackGuard = uintptr_t[T_StackGuardCount];
     
@@ -217,15 +218,16 @@ private:
         Deadline,   // The task's wake deadline arrived
     };
     
-    struct _Task : _ListRunSleep, _ListChannel {
+    struct _Task : _ListRunType, _ListDeadlineType, _ListChannelType {
         _TaskFn run = nullptr;
         void* sp = nullptr;
-        Deadline wakeDeadline = 0;
+        std::optional<Deadline> wakeDeadline;
         _WakeReason wakeReason = _WakeReason::Event;
         _StackGuard& stackGuard;
         
-        auto& listRunSleep() { return static_cast<_ListRunSleep&>(*this); }
-        auto& listChannel() { return static_cast<_ListChannel&>(*this); }
+        auto& listRun() { return static_cast<_ListRunType&>(*this); }
+        auto& listDeadline() { return static_cast<_ListDeadlineType&>(*this); }
+        auto& listChannel() { return static_cast<_ListChannelType&>(*this); }
     };
     
 public:
@@ -246,8 +248,8 @@ public:
         size_t _w = 0;
         size_t _r = 0;
         bool _full = false;
-        _ListChannel _senders;
-        _ListChannel _receivers;
+        _ListChannelType _senders;
+        _ListChannelType _receivers;
     };
     
 //    static void _CheckRunList() {
@@ -293,7 +295,7 @@ public:
         
         for (;;) {
             #warning TODO: we need to revisit our interrupt strategy here, because while we're accessing _ListRun, Tick() could be called
-            for (_ListRunSleep* i=_ListRun.next; i!=&_ListRun;) {
+            for (auto* i=_ListRun.next; i!=&_ListRun;) {
                 _TaskCurr = static_cast<_Task*>(i);
                 _TaskCurrSleepType = _SleepType::None;
                 _TaskSwap();
@@ -314,22 +316,22 @@ public:
                 
                 case _SleepType::Indefinite: {
                     // Detach `_TaskCurr` from the runnable list of tasks to sleep it
-                    _TaskCurr->listRunSleep().pop();
+                    _TaskCurr->listRun().pop();
                     break;
                 }
                 
                 case _SleepType::Deadline: {
                     // Detach `_TaskCurr` from the runnable list of tasks
-                    _TaskCurr->listRunSleep().pop();
+                    _TaskCurr->listRun().pop();
                     
-                    const Ticks delta = _TaskCurr->wakeDeadline - _ISR.CurrentTime;
-                    _ListRunSleep* insert = &_ListDeadline;
+                    const Ticks delta = *_TaskCurr->wakeDeadline-_ISR.CurrentTime;
+                    auto* insert = &_ListDeadline;
                     for (;;) {
-                        _ListRunSleep*const i = insert->next;
+                        auto*const i = insert->next;
                         // If we're at the end of the list, we're done
                         if (i == &_ListDeadline) break;
                         const _Task& t = static_cast<_Task&>(*i);
-                        const Ticks d = t.wakeDeadline - _ISR.CurrentTime;
+                        const Ticks d = *t.wakeDeadline - _ISR.CurrentTime;
                         // Use >= instead of > so that we attach the task at the earliest
                         // available slot, to minimize our computation.
                         if (delta >= d) break;
@@ -345,12 +347,12 @@ public:
                 }}
             }
             
-            // Reset _ISR.Wake now that we're assured that every task has been able to observe
-            // _ISR.Wake=true while ints were disabled during the entire process.
-            // (If ints were enabled, it's because we entered a task, and therefore
-            // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
-            // were entered -> ints are still disabled.)
-            _ISR.Wake = false;
+//            // Reset _ISR.Wake now that we're assured that every task has been able to observe
+//            // _ISR.Wake=true while ints were disabled during the entire process.
+//            // (If ints were enabled, it's because we entered a task, and therefore
+//            // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
+//            // were entered -> ints are still disabled.)
+//            _ISR.Wake = false;
             
             // If `_ListRun` is empty (ie there are no runnable tasks), go to sleep
             if (_ListRun.empty()) {
@@ -397,12 +399,19 @@ public:
     static bool Send(T& chan, const typename T::Type& val, std::optional<Deadline> deadline) {
         IntState ints(false);
         
-        while (chan.full()) {
+        if (chan.full()) {
             chan._senders.push(*_TaskCurr);
             const _WakeReason reason = _TaskSleep(deadline);
             // If we awoke because the deadline passed, return immediately
             if (reason == _WakeReason::Deadline) return false;
         }
+        
+//        while (chan.full()) {
+//            chan._senders.push(*_TaskCurr);
+//            const _WakeReason reason = _TaskSleep(deadline);
+//            // If we awoke because the deadline passed, return immediately
+//            if (reason == _WakeReason::Deadline) return false;
+//        }
         
 //        if (chan.full()) {
 //            chan._senders.push(*_TaskCurr);
@@ -436,7 +445,12 @@ public:
         
         // If there's a receiver, wake it
         if (!chan._receivers.empty()) {
-            _TaskWake(*chan._receivers.next, _WakeReason::Event);
+            _Task& task = static_cast<_Task&>(*chan._receivers.next);
+            task.listChannel().pop();
+            // Insert task into the beginning of the runnable list (_ListRun)
+            _ListRun.push(task);
+//            chan._receivers.next.listChannel().pop();
+//            _TaskWake(*chan._receivers.next, _WakeReason::Event);
         }
         
         return true;
@@ -501,13 +515,26 @@ public:
         // wakeDeadline to CurrentTime+ticks (not CurrentTime+ticks+1), and
         // our logic here matches that math to ensure that we sleep at
         // least `ticks`.
-        for (_ListRunSleep* i=_ListDeadline.next; i!=&_ListDeadline;) {
+        for (auto* i=_ListDeadline.next; i!=&_ListDeadline;) {
             _Task& task = static_cast<_Task&>(*i);
-            if (task.wakeDeadline != _ISR.CurrentTime) break;
+            if (*task.wakeDeadline != _ISR.CurrentTime) break;
             // Update `i` before we potentially wake the task, because
             // waking the task disrupts the linked list.
             i = i->next;
-            _TaskWake(task, _WakeReason::Deadline);
+            // Clear deadline to signal to the task that the deadline has passed
+            task.wakeDeadline = std::nullopt;
+            // Remove task from the deadline list
+            task.listDeadline().pop();
+            // Add task to runnable list
+            _ListRun.push(task);
+//            // Detach task from whatever lists it's a part of
+//            task.listRun().pop();
+//            task.listChannel().pop();
+//            // Insert task into the beginning of the runnable list (_ListRun)
+//            _ListRun.push(task);
+//            // Set the task's wake reason
+//            task.wakeReason = reason;
+//            _TaskWake(task, _WakeReason::Deadline);
             woke = true;
         }
         _ISR.CurrentTime++;
@@ -653,18 +680,18 @@ private:
 //        return _TaskCurr->wakeReason;
 //    }
     
-    // _TaskWake: insert the given task into the running list
-    template <typename T>
-    static void _TaskWake(T& t, _WakeReason reason) {
-        _Task& task = static_cast<_Task&>(t);
-        // Detach task from whatever lists it's a part of
-        task.listRunSleep().pop();
-        task.listChannel().pop();
-        // Insert task into the beginning of the runnable list (_ListRun)
-        _ListRun.push(task);
-        // Set the task's wake reason
-        task.wakeReason = reason;
-    }
+//    // _TaskWake: insert the given task into the running list
+//    template <typename T>
+//    static void _TaskWake(T& t, _WakeReason reason) {
+//        _Task& task = static_cast<_Task&>(t);
+//        // Detach task from whatever lists it's a part of
+//        task.listRun().pop();
+//        task.listChannel().pop();
+//        // Insert task into the beginning of the runnable list (_ListRun)
+//        _ListRun.push(task);
+//        // Set the task's wake reason
+//        task.wakeReason = reason;
+//    }
     
     // _TaskSwap(): swaps the current task and the saved task
     static void _TaskSwap() {
@@ -708,8 +735,8 @@ private:
     static constexpr std::array<_Task,_TaskCount> _TasksGet(std::integer_sequence<size_t, T_Idx...>) {
         return {
             _Task{
-                _ListRunSleep{
-                    _List<_ListRunSleep>{
+                _ListRunType{
+                    _List<_ListRunType>{
                         .prev = (T_Idx==0 ?             &_ListRun : &_Tasks[T_Idx-1]),
                         .next = (T_Idx==_TaskCount-1 ?  &_ListRun : &_Tasks[T_Idx+1]),
                     }
@@ -740,18 +767,18 @@ private:
     
     static inline _Task* _TaskCurr = nullptr;
     static inline _SleepType _TaskCurrSleepType = _SleepType::None;
-    static inline _ListRunSleep _ListRun = {
-        _List<_ListRunSleep>{
+    static inline _ListRunType _ListRun = {
+        _List<_ListRunType>{
             .prev = &_Tasks[_TaskCount-1],
             .next = &_Tasks[0],
         },
     };
-    static inline _ListRunSleep _ListDeadline;
+    static inline _ListDeadlineType _ListDeadline;
     
     static volatile inline struct {
         Ticks CurrentTime = 0;
         Deadline WakeDeadline = 0;
-        bool TickPause = false;
+//        bool TickPause = false;
     } _ISR;
 #undef Assert
 };
