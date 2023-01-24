@@ -292,6 +292,7 @@ public:
         IntState::Set(true);
         
         for (;;) {
+            #warning TODO: we need to revisit our interrupt strategy here, because while we're accessing _ListRun, Tick() could be called
             for (_ListRunSleep* i=_ListRun.next; i!=&_ListRun;) {
                 _TaskCurr = static_cast<_Task*>(i);
                 _TaskCurrSleepType = _SleepType::None;
