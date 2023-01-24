@@ -238,6 +238,9 @@ public:
         using Type = T_Type;
         static constexpr size_t Cap = T_Cap;
         
+        bool empty() const { return _w==_r && !_full; }
+        bool full() const { return _full; }
+        
 //    private:
         T_Type _q[std::max((size_t)1, T_Cap)];
         size_t _w = 0;
@@ -386,6 +389,7 @@ public:
         Send(chan, val, std::nullopt);
     }
     
+    #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
     #warning TODO: implement timeout
     // Buffered send
     template <typename T>
@@ -393,7 +397,7 @@ public:
         IntState ints(false);
         
         // Wait for the channel to have an available slot, or for the deadline to occur
-        while (chan._full) {
+        while (chan.full()) {
             // Add ourself as a sender
             chan._senders.push(*_TaskCurr);
             _TaskSleep(deadline);
@@ -424,7 +428,7 @@ public:
         IntState ints(false);
         
         // Wait for the channel to have available data, or for the deadline to occur
-        while (chan._w==chan._r && !chan._full) {
+        while (chan.empty()) {
             // Add ourself as a receiver
             chan._receivers.push(*_TaskCurr);
             _TaskSleep(deadline);
