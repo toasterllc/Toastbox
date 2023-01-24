@@ -396,14 +396,37 @@ public:
     static bool Send(T& chan, const typename T::Type& val, std::optional<Deadline> deadline) {
         IntState ints(false);
         
-        // If the channel's full, or there's already a line waiting to send,
-        // add ourself to the line.
-        if (chan.full() || !chan._senders.empty()) {
-            // Add ourself as a sender
+        while (chan.full()) {
             chan._senders.push(*_TaskCurr);
-            _TaskSleep(deadline);
-            _TaskCurr->listChannel().pop();
+            const _WakeReason reason = _TaskSleep(deadline);
+            // If we awoke because the deadline passed, return immediately
+            if (reason == _WakeReason::Deadline) return false;
         }
+        
+//        if (chan.full()) {
+//            chan._senders.push(*_TaskCurr);
+//            do {
+//                
+//            } while (chan.full());
+//        }
+//        
+//        for (;;) {
+//            if (!chan.full()) break;
+//            
+//        }
+//        
+//        while (chan.full()) {
+//            _TaskSleep(deadline);
+//        }
+//        
+//        // If the channel's full, or there's already a line waiting to send,
+//        // add ourself to the line.
+//        if (chan.full() || !chan._senders.empty()) {
+//            // Add ourself as a sender
+//            chan._senders.push(*_TaskCurr);
+//            _TaskSleep(deadline);
+//            _TaskCurr->listChannel().pop();
+//        }
         
         chan._q[chan._w] = val;
         chan._w++;
@@ -429,13 +452,11 @@ public:
     static std::optional<typename T::Type> Recv(T& chan, std::optional<Deadline> deadline) {
         IntState ints(false);
         
-        // If the channel's empty, or there's already a line waiting to receive,
-        // add ourself to the line.
-        if (chan.empty() || !chan._receivers.empty()) {
-            // Add ourself as a receiver
+        while (chan.empty()) {
             chan._receivers.push(*_TaskCurr);
-            _TaskSleep(deadline);
-            _TaskCurr->listChannel().pop();
+            const _WakeReason reason = _TaskSleep(deadline);
+            // If we awoke because the deadline passed, return immediately
+            if (reason == _WakeReason::Deadline) return std::nullopt;
         }
         
         const typename T::Type& val = chan._q[chan._r];
@@ -516,8 +537,102 @@ private:
         }
     }
     
-    // _TaskSleep(): sleep current task either indefinitely, or until a deadline arrives
+    // _TaskSleep(): sleep current task until a deadline arrives or indefinitely
+    //
+    // For a deadline to be considered in the past, it must be in the range:
+    //   [CurrentTime-TicksMax/2-1, CurrentTime-1]
+    // For a deadline to be considered in the future, it must be in the range:
+    //   [CurrentTime, CurrentTime+TicksMax/2]
+    //
+    // where TicksMax is the maximum value that the `Ticks` type can hold.
+    //
+    // See comment in function body for more info regarding the deadline parameter.
     static _WakeReason _TaskSleep(std::optional<Deadline> deadline=std::nullopt) {
+        if (deadline) {
+            // Test whether `deadline` has already passed.
+            //
+            // Because _ISR.CurrentTime rolls over periodically, it's impossible to differentiate
+            // between `deadline` passing versus merely being far in the future. (For example,
+            // consider the case where time is tracked with a uint8_t: if Deadline=127 and
+            // CurrentTime=128, either Deadline passed one tick ago, or Deadline will pass
+            // 255 ticks in the future.)
+            //
+            // To solve this ambiguity, we require deadlines to be within
+            // [-TicksMax/2-1, +TicksMax/2] of _ISR.CurrentTime (where TicksMax is the maximum
+            // value that the `Ticks` type can hold), which allows us to employ the following
+            // heuristic:
+            //
+            // For a deadline to be considered in the past, it must be in the range:
+            //   [CurrentTime-TicksMax/2-1, CurrentTime-1]
+            // For a deadline to be considered in the future, it must be in the range:
+            //   [CurrentTime, CurrentTime+TicksMax/2]
+            //
+            // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
+            // can employ the above heuristic to determine whether `deadline` has already passed.
+            constexpr Ticks TicksMax = std::numeric_limits<Ticks>::max();
+            const bool past = *deadline-_ISR.CurrentTime > TicksMax/2;
+            if (past) return _WakeReason::Deadline;
+            _TaskCurrSleepType = _SleepType::Deadline;
+            _TaskCurr->wakeDeadline = *deadline;
+        
+        } else {
+            _TaskCurrSleepType = _SleepType::Indefinite;
+        }
+        
+        // Return to scheduler
+        _TaskSwap();
+        return _TaskCurr->wakeReason;
+        
+////        const bool deadlinePassed = (deadline && _ISR.CurrentTime-*deadline <= TicksMax/2);
+////        if (deadlinePassed) return _WakeReason::Deadline;
+////        
+////        const bool future = *deadline-_ISR.CurrentTime <= TicksMax/2;
+////        if (!future) return _WakeReason::Deadline;
+//        
+//
+//        
+////        128-127
+////        
+////        1 > 127
+////        
+////        
+////        
+////          past: deadline-CurrentTime > 127
+////        future: deadline-CurrentTime <= 127
+////        
+////        0-64
+//        
+////        <= 127
+////        
+////        0,127
+//        
+////        deadlineFuture = *deadline-_ISR.CurrentTime < TicksMax/2
+//        
+////        deadlinePast = *deadline-_ISR.CurrentTime >= TicksMax/2
+//        
+//        
+////        12
+//        
+////        129-128
+//        
+//        
+//        
+//        129-128
+//        
+//        
+////        deadlineFuture = _ISR.CurrentTime-*deadline >= TicksMax/2
+//        129-128
+//        128-129
+//        128-128 >= 127
+//        128-128 <= TicksMax/2
+//        
+////        future: deadline >= _ISR.CurrentTime
+////          past: deadline < _ISR.CurrentTime
+//        
+//        // if CurrentTime-deadline <= 
+//        
+        
+        
         _TaskCurrSleepType = (deadline ? _SleepType::Deadline : _SleepType::Indefinite);
         _TaskCurr->wakeDeadline = deadline.value_or(0);
         // Return to scheduler
@@ -539,8 +654,9 @@ private:
     template <typename T>
     static void _TaskWake(T& t, _WakeReason reason) {
         _Task& task = static_cast<_Task&>(t);
-        // Remove task from run/sleep list
+        // Detach task from whatever lists it's a part of
         task.listRunSleep().pop();
+        task.listChannel().pop();
         // Insert task into the beginning of the runnable list (_ListRun)
         _ListRun.push(task);
         // Set the task's wake reason
