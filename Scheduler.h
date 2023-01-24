@@ -212,10 +212,16 @@ private:
     
     using _TaskFn = void(*)();
     
+    enum class _WakeReason : uint8_t {
+        Event,      // An event occurred that caused the task to be awoken
+        Deadline,   // The task's wake deadline arrived
+    };
+    
     struct _Task : _ListRunSleep, _ListChannel {
         _TaskFn run = nullptr;
         void* sp = nullptr;
-        Deadline wake = 0;
+        Deadline wakeDeadline = 0;
+        _WakeReason wakeReason = _WakeReason::Event;
         _StackGuard& stackGuard;
         
         auto& listRunSleep() { return static_cast<_ListRunSleep&>(*this); }
@@ -312,14 +318,14 @@ public:
                     // Detach `_TaskCurr` from the runnable list of tasks
                     _TaskCurr->listRunSleep().pop();
                     
-                    const Ticks delta = _TaskCurr->wake - _ISR.CurrentTime;
+                    const Ticks delta = _TaskCurr->wakeDeadline - _ISR.CurrentTime;
                     _ListRunSleep* insert = &_ListDeadline;
                     for (;;) {
                         _ListRunSleep*const i = insert->next;
                         // If we're at the end of the list, we're done
                         if (i == &_ListDeadline) break;
                         const _Task& t = static_cast<_Task&>(*i);
-                        const Ticks d = t.wake - _ISR.CurrentTime;
+                        const Ticks d = t.wakeDeadline - _ISR.CurrentTime;
                         // Use >= instead of > so that we attach the task at the earliest
                         // available slot, to minimize our computation.
                         if (delta >= d) break;
@@ -394,11 +400,12 @@ public:
                 
                 // If there's a receiver, wake it
                 if (!chan._receivers.empty()) {
-                    _TaskWake(*chan._receivers.next);
+                    _TaskWake(*chan._receivers.next, _WakeReason::Event);
                 }
                 return;
             }
             
+            // Add ourself as a sender
             chan._senders.push(*_TaskCurr);
             _TaskSleep();
         }
@@ -423,11 +430,12 @@ public:
                 
                 // If there's a sender, wake it
                 if (!chan._senders.empty()) {
-                    _TaskWake(*chan._senders.next);
+                    _TaskWake(*chan._senders.next, _WakeReason::Event);
                 }
                 return val;
             }
             
+            // Add ourself as a receiver
             chan._receivers.push(*_TaskCurr);
             _TaskSleep();
         }
@@ -496,24 +504,25 @@ private:
     
     // _TaskSleep(deadline): sleep current task until `wake`.
     // Returns true if the task awoke early because another task woke it.
-    static bool _TaskSleep(Deadline wake) {
+    static _WakeReason _TaskSleep(Deadline wake) {
         _TaskCurrSleepType = _SleepType::Deadline;
-        _TaskCurr->wake = wake;
+        _TaskCurr->wakeDeadline = wake;
         // Return to scheduler
         _TaskSwap();
-        #warning TODO: implement real return value
-        return true;
+        return _TaskCurr->wakeReason;
     }
     
     // _TaskWake: insert the given task into the running list
     template <typename T>
-    static void _TaskWake(T& t) {
+    static void _TaskWake(T& t, _WakeReason reason) {
         _Task& task = static_cast<_Task&>(t);
         // Detach task from whatever lists it's a part of
         task.listRunSleep().pop();
         task.listChannel().pop();
         // Insert task into the beginning of the runnable list (_ListRun)
         _ListRun.push(task);
+        // Set the task's wake reason
+        task.wakeReason = reason;
     }
     
     // _TaskSwap(): swaps the current task and the saved task
@@ -582,7 +591,7 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
     
-    enum class _SleepType {
+    enum class _SleepType : uint8_t {
         None,
         Indefinite,
         Deadline,
