@@ -396,11 +396,13 @@ public:
     static bool Send(T& chan, const typename T::Type& val, std::optional<Deadline> deadline) {
         IntState ints(false);
         
-        // Wait for the channel to have an available slot, or for the deadline to occur
-        while (chan.full()) {
+        // If the channel's full, or there's already a line waiting to send,
+        // add ourself to the line.
+        if (chan.full() || !chan._senders.empty()) {
             // Add ourself as a sender
             chan._senders.push(*_TaskCurr);
             _TaskSleep(deadline);
+            _TaskCurr->listChannel().pop();
         }
         
         chan._q[chan._w] = val;
@@ -427,11 +429,13 @@ public:
     static std::optional<typename T::Type> Recv(T& chan, std::optional<Deadline> deadline) {
         IntState ints(false);
         
-        // Wait for the channel to have available data, or for the deadline to occur
-        while (chan.empty()) {
+        // If the channel's empty, or there's already a line waiting to receive,
+        // add ourself to the line.
+        if (chan.empty() || !chan._receivers.empty()) {
             // Add ourself as a receiver
             chan._receivers.push(*_TaskCurr);
             _TaskSleep(deadline);
+            _TaskCurr->listChannel().pop();
         }
         
         const typename T::Type& val = chan._q[chan._r];
@@ -535,9 +539,8 @@ private:
     template <typename T>
     static void _TaskWake(T& t, _WakeReason reason) {
         _Task& task = static_cast<_Task&>(t);
-        // Detach task from whatever lists it's a part of
+        // Remove task from run/sleep list
         task.listRunSleep().pop();
-        task.listChannel().pop();
         // Insert task into the beginning of the runnable list (_ListRun)
         _ListRun.push(task);
         // Set the task's wake reason
