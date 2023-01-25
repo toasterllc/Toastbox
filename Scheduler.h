@@ -336,6 +336,10 @@ public:
         _ListRun.push(task);
     }
     
+    static void _TaskInsertListChannel(_ListChannelType& l, _Task& t) {
+        l.push(t);
+    }
+    
     template <typename T>
     static void Send(T& chan, const typename T::Type& val) {
         Send(chan, val, std::nullopt);
@@ -350,7 +354,7 @@ public:
         
         if (chan.full()) {
             #warning TODO: make sure to remove ourself from chan._senders / _ListDeadline upon return
-            chan._senders.push(*_TaskCurr);
+            _TaskInsertListChannel(chan._senders, *_TaskCurr);
             
             if (deadline) {
                 _TaskInsertListDeadline(*deadline);
@@ -392,7 +396,7 @@ public:
         
         if (chan.empty()) {
             #warning TODO: make sure to remove ourself from chan._senders / _ListDeadline upon return
-            chan._receivers.push(*_TaskCurr);
+            _TaskInsertListChannel(chan._receivers, *_TaskCurr);
             
             if (deadline) {
                 _TaskInsertListDeadline(*deadline);
