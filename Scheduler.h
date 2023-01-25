@@ -312,14 +312,6 @@ public:
         _TaskYield();
     }
     
-    // _ListRunInsert(): insert task into runnable list
-    template <typename T>
-    static void _ListRunInsert(T& t) {
-        _Task& task = static_cast<_Task&>(t);
-        // Insert task into the beginning of the runnable list (_ListRun)
-        _ListRun.push(task);
-    }
-    
     template <typename T>
     class _ListRemover {
     public:
@@ -338,12 +330,20 @@ public:
     using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
     using _ListRemoverChannel = _ListRemover<_ListChannelType>;
     
+    // _ListRunInsert(): insert task into runnable list
+    template <typename T>
+    static void _ListRunInsert(T& t) {
+        _Task& task = static_cast<_Task&>(t);
+        // Insert task into the beginning of the runnable list (_ListRun)
+        _ListRun.push(task);
+    }
+    
     // _ListDeadlineInsert(): insert task into deadline list, so that it's awoken
     // when the deadline arrives.
-    static _ListDeadlineType& _ListDeadlineInsert(Deadline deadline) {
-        _TaskCurr->wakeDeadline = deadline;
+    static _ListDeadlineType& _ListDeadlineInsert(_Task& task, Deadline deadline) {
+        task.wakeDeadline = deadline;
         
-        // Insert `_TaskCurr` into the appropriate point in `_ListDeadline`
+        // Insert `task` into the appropriate point in `_ListDeadline`
         // (depending on its wakeDeadline)
         const Ticks delta = deadline-_ISR.CurrentTime;
         _ListDeadlineType* insert = &_ListDeadline;
@@ -358,7 +358,7 @@ public:
             if (delta >= d) break;
             insert = i;
         }
-        return insert->push(*_TaskCurr);
+        return insert->push(task);
     }
     
     template <typename T>
@@ -375,7 +375,7 @@ public:
         if (chan.full()) {
             _ListRemoverChannel cleanupChannel = chan._senders.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (deadline) cleanupDeadline = _ListDeadlineInsert(*deadline);
+            if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -413,7 +413,7 @@ public:
         if (chan.empty()) {
             _ListRemoverChannel cleanupChannel = chan._receivers.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (deadline) cleanupDeadline = _ListDeadlineInsert(*deadline);
+            if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
                 _TaskSleep();
