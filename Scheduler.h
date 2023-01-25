@@ -186,7 +186,7 @@ private:
         
         #warning TODO: if `elm` is already a part of a list, we need to pop it first
         template <typename T_Elm>
-        void push(T_Elm& elm) {
+        T& push(T_Elm& elm) {
             T& x = static_cast<T&>(elm);
             T& l = static_cast<T&>(*this);
             T& r = *l.next;
@@ -194,6 +194,7 @@ private:
             x.next = &r;
             l.next = &x;
             r.prev = &x;
+            return x;
         }
         
         void pop() {
@@ -305,8 +306,34 @@ public:
         _TaskYield();
     }
     
+    // _TaskInsertListRun(): insert task into runnable list
+    template <typename T>
+    static void _TaskInsertListRun(T& t) {
+        _Task& task = static_cast<_Task&>(t);
+        // Insert task into the beginning of the runnable list (_ListRun)
+        _ListRun.push(task);
+    }
+    
+    template <typename T>
+    class _ListRemover {
+    public:
+        _ListRemover() {}
+        _ListRemover(T& x) : _x(&x) {}
+        _ListRemover(const _ListRemover& x)             = delete;
+        _ListRemover& operator=(const _ListRemover& x)  = delete;
+        _ListRemover(_ListRemover&& x)                  { swap(x); }
+        _ListRemover& operator=(_ListRemover&& x)       { swap(x); return *this; }
+        ~_ListRemover() { if (_x) _x->pop(); }
+        void swap(_ListRemover& x) { std::swap(_x, x._x); }
+    private:
+        T* _x = nullptr;
+    };
+    
+    using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
+    using _ListRemoverChannel = _ListRemover<_ListChannelType>;
+    
     // _TaskInsertListDeadline(): insert task into deadline list
-    static void _TaskInsertListDeadline(Deadline deadline) {
+    static _ListRemoverDeadline _TaskInsertListDeadline(Deadline deadline) {
         _TaskCurr->wakeDeadline = deadline;
         
         // Insert `_TaskCurr` into the appropriate point in `_ListDeadline`
@@ -324,21 +351,12 @@ public:
             if (delta >= d) break;
             insert = i;
         }
-        
-        insert->push(*_TaskCurr);
+        return insert->push(*_TaskCurr);
     }
     
-    // _TaskInsertListRun(): insert task into runnable list
-    template <typename T>
-    static void _TaskInsertListRun(T& t) {
-        _Task& task = static_cast<_Task&>(t);
-        // Insert task into the beginning of the runnable list (_ListRun)
-        _ListRun.push(task);
-    }
-    
-    static void _TaskInsertListChannel(_ListChannelType& l, _Task& t) {
-        l.push(t);
-    }
+//    static _ListRemoverChannel _TaskInsertListChannel(_ListChannelType& l, _Task& t) {
+//        return l.push(t);
+//    }
     
     template <typename T>
     static void Send(T& chan, const typename T::Type& val) {
@@ -353,12 +371,9 @@ public:
         IntState ints(false);
         
         if (chan.full()) {
-            #warning TODO: make sure to remove ourself from chan._senders / _ListDeadline upon return
-            _TaskInsertListChannel(chan._senders, *_TaskCurr);
-            
-            if (deadline) {
-                _TaskInsertListDeadline(*deadline);
-            }
+            _ListRemoverChannel cleanupChannel = chan._senders.push(*_TaskCurr);
+            _ListRemoverDeadline cleanupDeadline;
+            if (deadline) cleanupDeadline = _TaskInsertListDeadline(*deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -395,12 +410,9 @@ public:
         IntState ints(false);
         
         if (chan.empty()) {
-            #warning TODO: make sure to remove ourself from chan._senders / _ListDeadline upon return
-            _TaskInsertListChannel(chan._receivers, *_TaskCurr);
-            
-            if (deadline) {
-                _TaskInsertListDeadline(*deadline);
-            }
+            _ListRemoverChannel cleanupChannel = chan._receivers.push(*_TaskCurr);
+            _ListRemoverDeadline cleanupDeadline;
+            if (deadline) cleanupDeadline = _TaskInsertListDeadline(*deadline);
             
             for (;;) {
                 _TaskSleep();
