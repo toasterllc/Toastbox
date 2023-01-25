@@ -162,18 +162,16 @@ private:
 template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
     
-    void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
-    void T_Error(uint16_t),             // T_Error: function to call upon an unrecoverable error (eg stack overflow)
+    void T_Sleep(),                     // T_Sleep: sleep function; invoked when no tasks have work to do
     
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
-    auto T_InterruptStack,              // T_InterruptStack: interrupt stack pointer (only used to monitor
-                                        // interrupt stack for overflow; unused if T_StackGuardCount==0)
+    void T_StackOverflow(),             // T_StackOverflow: function to call when stack overflow is detected
+    auto T_StackInterrupt,              // T_StackInterrupt: interrupt stack pointer (only used to monitor
+                                        //   interrupt stack for overflow; unused if T_StackGuardCount==0)
     
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
-#define Assert(x) if (!(x)) T_Error(__LINE__)
-
 public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
@@ -187,24 +185,6 @@ private:
         T* next = static_cast<T*>(this);
         
         bool empty() const { return next==this; }
-        
-//        template <typename T_List>
-//        void meow(T& l) {
-//        }
-        
-        
-//        T& push(T& l) {
-//            // Ensure that the element isn't a part of any list before we attach it
-//            T& x = static_cast<T&>(*this);
-//            x._pop();
-//            
-//            T& r = *l.next;
-//            x.prev = &l;
-//            x.next = &r;
-//            l.next = &x;
-//            r.prev = &x;
-//            return x;
-//        }
         
         template <typename T_Elm>
         T& push(T_Elm& elm) {
@@ -299,39 +279,11 @@ public:
         // Initialize the interrupt stack guard
         if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
         
-//        _TaskCurr = &_Tasks[0];
-//        _TaskCurr->run();
-        
         _Task junk = { .stackGuard = _Tasks[0].stackGuard };
         _TaskCurr = &junk;
         _TaskNext = &_Tasks[0];
         _TaskSwap();
         for (;;);
-        
-        
-//        // Disable interrupts by default, so that scheduler bookkeeping isn't interrupted
-//        IntState::Set(false);
-//        
-//        for (;;) {
-//            // Iterate over `_ListRun` a single time, running each task once
-//            _TaskCurr = static_cast<_Task*>(_ListRun.next);
-//            while (_TaskCurr != &_ListRun) {
-//                // Enable interrupts while we call into tasks
-//                IntState ints(true);
-//                _TaskSwap();
-//                
-//                // Check stack guards
-//                if constexpr ((bool)T_StackGuardCount) {
-//                    _StackGuardCheck(_SchedulerStackGuard);
-//                    _StackGuardCheck(_TaskCurr->stackGuard);
-//                }
-//                
-//                _TaskCurr = _TaskNext;
-//            }
-//            
-//            // Sleep until we have a task to run
-//            while (_ListRun.empty()) T_Sleep();
-//        }
     }
     
     // Yield(): yield current task to the scheduler
@@ -533,7 +485,9 @@ private:
     
     static void _StackGuardCheck(const _StackGuard& guard) {
         for (const uintptr_t& x : guard) {
-            Assert(x == _StackGuardMagicNumber);
+            if (x != _StackGuardMagicNumber) {
+                T_StackOverflow();
+            }
         }
     }
     
@@ -569,42 +523,6 @@ private:
         if (_TaskNext == &_ListRun) {
             _TaskNext = static_cast<_Task*>(_ListRun.next);
         }
-        
-//        while (_TaskNext == &_ListRun) {
-//            _TaskNext = static_cast<_Task*>(_ListRun.next);
-//            if (_TaskNext == &_ListRun) T_Sleep();
-//        }
-        
-//        while (_TaskNext == &_ListRun) {
-//            _TaskNext = static_cast<_Task*>(_ListRun.next);
-//            T_Sleep();
-//        }
-        
-//        while (_TaskNext == &_ListRun) {
-//            _TaskNext = static_cast<_Task*>(_ListRun.next);
-//            T_Sleep();
-//        }
-        
-//        for (;;) {
-//            // Iterate over `_ListRun` a single time, running each task once
-//            _TaskCurr = static_cast<_Task*>(_ListRun.next);
-//            while (_TaskCurr != &_ListRun) {
-//                // Enable interrupts while we call into tasks
-//                IntState ints(true);
-//                _TaskSwap();
-//                
-//                // Check stack guards
-//                if constexpr ((bool)T_StackGuardCount) {
-//                    _StackGuardCheck(_SchedulerStackGuard);
-//                    _StackGuardCheck(_TaskCurr->stackGuard);
-//                }
-//                
-//                _TaskCurr = _TaskNext;
-//            }
-//            
-//            // Sleep until we have a task to run
-//            while (_ListRun.empty()) T_Sleep();
-//        }
         
         std::swap(_TaskCurr, _TaskNext);
         IntState ints(true); // Save/restore interrupt state
@@ -666,11 +584,11 @@ private:
     static constexpr bool _StackGuardEnabled = (bool)T_StackGuardCount;
     static constexpr bool _InterruptStackGuardEnabled =
         _StackGuardEnabled &&
-        !std::is_null_pointer<decltype(T_InterruptStack)>::value;
+        !std::is_null_pointer<decltype(T_StackInterrupt)>::value;
     // _InterruptStackGuard: ideally this would be `static constexpr` instead of
     // `static inline`, but C++ doesn't allow constexpr reinterpret_cast.
     // In C++20 we could use std::bit_cast for this.
-    static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_InterruptStack;
+    static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
     
     static inline _Task* _TaskCurr = nullptr;
     static inline _Task* _TaskNext = nullptr;
@@ -685,7 +603,6 @@ private:
     static volatile inline struct {
         Ticks CurrentTime = 0;
     } _ISR;
-#undef Assert
 };
 
 } // namespace Toastbox
