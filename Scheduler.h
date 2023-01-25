@@ -186,8 +186,10 @@ private:
         
         template <typename T_Elm>
         T& push(T_Elm& elm) {
+            // Ensure that the element isn't a part of any list before we attach it
             T& x = static_cast<T&>(elm);
-            if (!x.empty()) x._pop();
+            x._pop();
+            
             T& l = static_cast<T&>(*this);
             T& r = *l.next;
             x.prev = &l;
