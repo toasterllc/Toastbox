@@ -347,6 +347,8 @@ public:
         Send(chan, val, std::nullopt);
     }
     
+    #warning TODO: implement version of Send() / Recv() that doesn't block so it can be used from the interrupt context
+    
     #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
     // Buffered send
     template <typename T>
@@ -427,7 +429,8 @@ public:
         //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR
         //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
-        _TaskSleep(_ISR.CurrentTime+ticks);
+        _ListDeadlineInsert(*_TaskCurr, _ISR.CurrentTime+ticks);
+        _TaskSleep();
     }
     
     // Tick(): notify scheduler that a tick has passed
