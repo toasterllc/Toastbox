@@ -164,7 +164,7 @@ template <
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
     void T_Error(uint16_t),             // T_Error: function to call upon an unrecoverable error (eg stack overflow)
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
-    typename T_SchedulerTask,
+    auto T_InterruptStack,
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
@@ -275,17 +275,10 @@ public:
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
-        // Initialize the main stack guard
-        if constexpr ((bool)T_StackGuardCount) {
-            _StackGuardInit(_SchedulerStackGuard);
-        }
-        
         // Prepare every task
         for (_Task& task : _Tasks) {
             // Initialize the task's stack guard
-            if constexpr ((bool)T_StackGuardCount) {
-                _StackGuardInit(*task.stackGuard);
-            }
+            if constexpr (_StackGuardEnabled) _StackGuardInit(*task.stackGuard);
             
             const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
             void**& sp = *((void***)&task.sp);
@@ -299,10 +292,13 @@ public:
             sp -= _SchedulerStackSaveRegCount;
         }
         
+        // Initialize the interrupt stack guard
+        if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
+        
 //        _TaskCurr = &_Tasks[0];
 //        _TaskCurr->run();
         
-        _Task junk = { .stackGuard = &_SchedulerStackGuard };
+        _Task junk = { .stackGuard = _Tasks[0].stackGuard };
         _TaskCurr = &junk;
         _TaskNext = &_Tasks[0];
         _TaskSwap();
@@ -559,10 +555,8 @@ private:
     // _TaskSwap(): saves _TaskCurr and restores _TaskNext
     static void _TaskSwap() {
         // Check stack guards
-        if constexpr ((bool)T_StackGuardCount) {
-            _StackGuardCheck(_SchedulerStackGuard);
-            _StackGuardCheck(*_TaskCurr->stackGuard);
-        }
+        if constexpr (_StackGuardEnabled) _StackGuardCheck(*_TaskCurr->stackGuard);
+        if constexpr (_InterruptStackGuardEnabled) _StackGuardCheck(_InterruptStackGuard);
         
         #warning TODO: we should disable interrupts while we do this _ListRun bookkeeping
         // Sleep until we have a task to run
@@ -665,10 +659,14 @@ private:
     
     static inline std::array<_Task,_TaskCount> _Tasks = _TasksGet();
     
-    // _SchedulerStackGuard: ideally this would be `static constexpr` instead of
+    static constexpr bool _StackGuardEnabled = (bool)T_StackGuardCount;
+    static constexpr bool _InterruptStackGuardEnabled =
+        _StackGuardEnabled &&
+        !std::is_null_pointer<decltype(T_InterruptStack)>::value;
+    // _InterruptStackGuard: ideally this would be `static constexpr` instead of
     // `static inline`, but C++ doesn't allow constexpr reinterpret_cast.
     // In C++20 we could use std::bit_cast for this.
-    static inline _StackGuard& _SchedulerStackGuard = *(_StackGuard*)T_SchedulerTask::Stack;
+    static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_InterruptStack;
     
     static inline _Task* _TaskCurr = nullptr;
     static inline _Task* _TaskNext = nullptr;
