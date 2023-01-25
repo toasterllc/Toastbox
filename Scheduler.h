@@ -161,10 +161,14 @@ private:
 
 template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
+    
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
     void T_Error(uint16_t),             // T_Error: function to call upon an unrecoverable error (eg stack overflow)
+    
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
-    auto T_InterruptStack,
+    auto T_InterruptStack,              // T_InterruptStack: interrupt stack pointer (only used to monitor
+                                        // interrupt stack for overflow; unused if T_StackGuardCount==0)
+    
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
