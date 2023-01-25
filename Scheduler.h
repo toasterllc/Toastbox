@@ -332,8 +332,9 @@ public:
     using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
     using _ListRemoverChannel = _ListRemover<_ListChannelType>;
     
-    // _TaskInsertListDeadline(): insert task into deadline list
-    static _ListRemoverDeadline _TaskInsertListDeadline(Deadline deadline) {
+    // _TaskInsertListDeadline(): insert task into deadline list, so that it's awoken
+    // when the deadline arrives.
+    static _ListDeadlineType& _TaskInsertListDeadline(Deadline deadline) {
         _TaskCurr->wakeDeadline = deadline;
         
         // Insert `_TaskCurr` into the appropriate point in `_ListDeadline`
