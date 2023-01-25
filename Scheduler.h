@@ -299,9 +299,13 @@ public:
             sp -= _SchedulerStackSaveRegCount;
         }
         
-        _Task junk;
+//        _TaskCurr = &_Tasks[0];
+//        _TaskCurr->run();
+        
+        _Task junk = { .stackGuard = &_SchedulerStackGuard };
         _TaskCurr = &junk;
-        __TaskSwap();
+        _TaskNext = &_Tasks[0];
+        _TaskSwap();
         for (;;);
         
         
@@ -603,14 +607,16 @@ private:
 //            while (_ListRun.empty()) T_Sleep();
 //        }
         
+        std::swap(_TaskCurr, _TaskNext);
         IntState ints(true); // Save/restore interrupt state
         __TaskSwap();
     }
     
-    // __TaskSwap(): saves _TaskCurr and restores _TaskNext
+    // __TaskSwap(): saves _TaskNext->sp and restores _TaskCurr->sp
+    // (note that tasks must be swapped before calling)
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void __TaskSwap() {
-        _SchedulerTaskSwap(_TaskCurr->sp, _TaskNext->sp);
+        _SchedulerTaskSwap(_TaskNext->sp, _TaskCurr->sp);
     }
     
     static constexpr Ticks _TicksForUs(uint32_t us) {
@@ -663,7 +669,7 @@ private:
     static inline _StackGuard& _SchedulerStackGuard = *(_StackGuard*)T_SchedulerTask::Stack;
     
     static inline _Task* _TaskCurr = nullptr;
-    static inline _Task* _TaskNext = &_Tasks[0];
+    static inline _Task* _TaskNext = nullptr;
     static inline _ListRunType _ListRun = {
         _List<_ListRunType>{
             .prev = &_Tasks[_TaskCount-1],
