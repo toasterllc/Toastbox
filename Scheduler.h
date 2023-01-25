@@ -612,8 +612,9 @@ private:
         __TaskSwap();
     }
     
-    // __TaskSwap(): saves _TaskNext->sp and restores _TaskCurr->sp
-    // (note that tasks must be swapped before calling)
+    // __TaskSwap(): saves current stack pointer into _TaskNext->sp and
+    // restores the stack pointer to _TaskCurr->sp (note that tasks must
+    // be swapped before calling)
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void __TaskSwap() {
         _SchedulerTaskSwap(_TaskNext->sp, _TaskCurr->sp);
