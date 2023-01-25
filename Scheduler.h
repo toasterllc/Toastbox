@@ -355,17 +355,12 @@ public:
         return insert->push(*_TaskCurr);
     }
     
-//    static _ListRemoverChannel _TaskInsertListChannel(_ListChannelType& l, _Task& t) {
-//        return l.push(t);
-//    }
-    
     template <typename T>
     static void Send(T& chan, const typename T::Type& val) {
         Send(chan, val, std::nullopt);
     }
     
     #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
-    #warning TODO: implement timeout
     // Buffered send
     template <typename T>
     static bool Send(T& chan, const typename T::Type& val, std::optional<Deadline> deadline) {
@@ -404,7 +399,6 @@ public:
         return *Recv(chan, std::nullopt);
     }
     
-    #warning TODO: implement timeout
     // Buffered receive
     template <typename T>
     static std::optional<typename T::Type> Recv(T& chan, std::optional<Deadline> deadline) {
