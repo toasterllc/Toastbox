@@ -53,9 +53,10 @@ private:
 // with a different task. Steps:
 //
 // (1) Push callee-saved regs onto stack (including $PC if needed for step #4 to work)
-// (2) Swap $SP (stack pointer) and `sp` (macro argument)
-// (3) Pop callee-saved registers from stack
-// (4) Return to caller
+// (2) Save $SP (stack pointer) into `spSave` (macro argument)
+// (3) Restore $SP (stack pointer) from `spRestore` (macro argument)
+// (4) Pop callee-saved registers from stack
+// (5) Return to caller
 
 #if defined(SchedulerMSP430)
 
@@ -131,7 +132,7 @@ private:
 
 #define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
 #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that _SchedulerTaskSwap saves
-#define _SchedulerTaskSwap(sp)                                                          \
+#define _SchedulerTaskSwap(spSave, spRestore)                                           \
                                                                                         \
     /* ## Architecture = AMD64 */                                                       \
     asm volatile("push %%rbx" : : : );                                  /* (1) */       \
@@ -140,16 +141,15 @@ private:
     asm volatile("push %%r13" : : : );                                  /* (1) */       \
     asm volatile("push %%r14" : : : );                                  /* (1) */       \
     asm volatile("push %%r15" : : : );                                  /* (1) */       \
-    asm volatile("mov %%rsp, %%rbx" : : : "rbx");                       /* (2) */       \
-    asm volatile("mov %0, %%rsp" : : "m" (sp) : );                      /* (2) */       \
-    asm volatile("mov %%rbx, %0" : "=m" (sp) : : );                     /* (2) */       \
-    asm volatile("pop %%r15" : : : );                                   /* (3) */       \
-    asm volatile("pop %%r14" : : : );                                   /* (3) */       \
-    asm volatile("pop %%r13" : : : );                                   /* (3) */       \
-    asm volatile("pop %%r12" : : : );                                   /* (3) */       \
-    asm volatile("pop %%rbp" : : : );                                   /* (3) */       \
-    asm volatile("pop %%rbx" : : : );                                   /* (3) */       \
-    asm volatile("ret" : : : );                                         /* (4) */       \
+    asm volatile("mov %%rsp, %0" : "=m" (spSave) : : );                 /* (2) */       \
+    asm volatile("mov %0, %%rsp" : : "m" (spRestore) : );               /* (3) */       \
+    asm volatile("pop %%r15" : : : );                                   /* (4) */       \
+    asm volatile("pop %%r14" : : : );                                   /* (4) */       \
+    asm volatile("pop %%r13" : : : );                                   /* (4) */       \
+    asm volatile("pop %%r12" : : : );                                   /* (4) */       \
+    asm volatile("pop %%rbp" : : : );                                   /* (4) */       \
+    asm volatile("pop %%rbx" : : : );                                   /* (4) */       \
+    asm volatile("ret" : : : );                                         /* (5) */       \
     
 #else
     
@@ -299,29 +299,35 @@ public:
             sp -= _SchedulerStackSaveRegCount;
         }
         
-        // Disable interrupts by default, so that scheduler bookkeeping isn't interrupted
-        IntState::Set(false);
+        _Task junk = { .stackGuard = _SchedulerStackGuard };
+        _TaskCurr = &junk;
+        __TaskSwap();
+        for (;;);
         
-        for (;;) {
-            // Iterate over `_ListRun` a single time, running each task once
-            _TaskCurr = static_cast<_Task*>(_ListRun.next);
-            while (_TaskCurr != &_ListRun) {
-                // Enable interrupts while we call into tasks
-                IntState ints(true);
-                _TaskSwap();
-                
-                // Check stack guards
-                if constexpr ((bool)T_StackGuardCount) {
-                    _StackGuardCheck(_SchedulerStackGuard);
-                    _StackGuardCheck(_TaskCurr->stackGuard);
-                }
-                
-                _TaskCurr = _TaskNext;
-            }
-            
-            // Sleep until we have a task to run
-            while (_ListRun.empty()) T_Sleep();
-        }
+        
+//        // Disable interrupts by default, so that scheduler bookkeeping isn't interrupted
+//        IntState::Set(false);
+//        
+//        for (;;) {
+//            // Iterate over `_ListRun` a single time, running each task once
+//            _TaskCurr = static_cast<_Task*>(_ListRun.next);
+//            while (_TaskCurr != &_ListRun) {
+//                // Enable interrupts while we call into tasks
+//                IntState ints(true);
+//                _TaskSwap();
+//                
+//                // Check stack guards
+//                if constexpr ((bool)T_StackGuardCount) {
+//                    _StackGuardCheck(_SchedulerStackGuard);
+//                    _StackGuardCheck(_TaskCurr->stackGuard);
+//                }
+//                
+//                _TaskCurr = _TaskNext;
+//            }
+//            
+//            // Sleep until we have a task to run
+//            while (_ListRun.empty()) T_Sleep();
+//        }
     }
     
     // Yield(): yield current task to the scheduler
@@ -545,16 +551,66 @@ private:
         _TaskSwap();
     }
     
-    // _TaskSwap(): swaps the current task and the saved task
+    // _TaskSwap(): saves _TaskCurr and restores _TaskNext
     static void _TaskSwap() {
-        IntState ints; // Save/restore interrupt state
+        // Check stack guards
+        if constexpr ((bool)T_StackGuardCount) {
+            _StackGuardCheck(_SchedulerStackGuard);
+            _StackGuardCheck(_TaskCurr->stackGuard);
+        }
+        
+        #warning TODO: we should disable interrupts while we do this _ListRun bookkeeping
+        // Sleep until we have a task to run
+        while (_ListRun.empty()) T_Sleep();
+        
+        if (_TaskNext == &_ListRun) {
+            _TaskNext = static_cast<_Task*>(_ListRun.next);
+        }
+        
+//        while (_TaskNext == &_ListRun) {
+//            _TaskNext = static_cast<_Task*>(_ListRun.next);
+//            if (_TaskNext == &_ListRun) T_Sleep();
+//        }
+        
+//        while (_TaskNext == &_ListRun) {
+//            _TaskNext = static_cast<_Task*>(_ListRun.next);
+//            T_Sleep();
+//        }
+        
+//        while (_TaskNext == &_ListRun) {
+//            _TaskNext = static_cast<_Task*>(_ListRun.next);
+//            T_Sleep();
+//        }
+        
+//        for (;;) {
+//            // Iterate over `_ListRun` a single time, running each task once
+//            _TaskCurr = static_cast<_Task*>(_ListRun.next);
+//            while (_TaskCurr != &_ListRun) {
+//                // Enable interrupts while we call into tasks
+//                IntState ints(true);
+//                _TaskSwap();
+//                
+//                // Check stack guards
+//                if constexpr ((bool)T_StackGuardCount) {
+//                    _StackGuardCheck(_SchedulerStackGuard);
+//                    _StackGuardCheck(_TaskCurr->stackGuard);
+//                }
+//                
+//                _TaskCurr = _TaskNext;
+//            }
+//            
+//            // Sleep until we have a task to run
+//            while (_ListRun.empty()) T_Sleep();
+//        }
+        
+        IntState ints(true); // Save/restore interrupt state
         __TaskSwap();
     }
     
-    // __TaskSwap(): swaps the current task and the saved task
+    // __TaskSwap(): saves _TaskCurr and restores _TaskNext
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void __TaskSwap() {
-        _SchedulerTaskSwap(_TaskCurr->sp);
+        _SchedulerTaskSwap(_TaskCurr->sp, _TaskNext->sp);
     }
     
     static constexpr Ticks _TicksForUs(uint32_t us) {
@@ -607,7 +663,7 @@ private:
     static inline _StackGuard& _SchedulerStackGuard = *(_StackGuard*)T_SchedulerTask::Stack;
     
     static inline _Task* _TaskCurr = nullptr;
-    static inline _Task* _TaskNext = nullptr;
+    static inline _Task* _TaskNext = &_Tasks[0];
     static inline _ListRunType _ListRun = {
         _List<_ListRunType>{
             .prev = &_Tasks[_TaskCount-1],
