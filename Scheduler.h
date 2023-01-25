@@ -184,10 +184,10 @@ private:
         
         bool empty() const { return next==this; }
         
-        #warning TODO: if `elm` is already a part of a list, we need to pop it first
         template <typename T_Elm>
         T& push(T_Elm& elm) {
             T& x = static_cast<T&>(elm);
+            if (!x.empty()) x._pop();
             T& l = static_cast<T&>(*this);
             T& r = *l.next;
             x.prev = &l;
@@ -198,12 +198,16 @@ private:
         }
         
         void pop() {
+            _pop();
+            prev = static_cast<T*>(this);
+            next = static_cast<T*>(this);
+        }
+        
+        void _pop() {
             T& l = *prev;
             T& r = *next;
             l.next = &r;
             r.prev = &l;
-            prev = static_cast<T*>(this);
-            next = static_cast<T*>(this);
         }
     };
     
@@ -306,9 +310,9 @@ public:
         _TaskYield();
     }
     
-    // _TaskInsertListRun(): insert task into runnable list
+    // _ListRunInsert(): insert task into runnable list
     template <typename T>
-    static void _TaskInsertListRun(T& t) {
+    static void _ListRunInsert(T& t) {
         _Task& task = static_cast<_Task&>(t);
         // Insert task into the beginning of the runnable list (_ListRun)
         _ListRun.push(task);
@@ -332,9 +336,9 @@ public:
     using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
     using _ListRemoverChannel = _ListRemover<_ListChannelType>;
     
-    // _TaskInsertListDeadline(): insert task into deadline list, so that it's awoken
+    // _ListDeadlineInsert(): insert task into deadline list, so that it's awoken
     // when the deadline arrives.
-    static _ListDeadlineType& _TaskInsertListDeadline(Deadline deadline) {
+    static _ListDeadlineType& _ListDeadlineInsert(Deadline deadline) {
         _TaskCurr->wakeDeadline = deadline;
         
         // Insert `_TaskCurr` into the appropriate point in `_ListDeadline`
@@ -369,7 +373,7 @@ public:
         if (chan.full()) {
             _ListRemoverChannel cleanupChannel = chan._senders.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (deadline) cleanupDeadline = _TaskInsertListDeadline(*deadline);
+            if (deadline) cleanupDeadline = _ListDeadlineInsert(*deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -388,7 +392,7 @@ public:
         // If there's a receiver, wake it
         if (!chan._receivers.empty()) {
             // Insert task into the beginning of the runnable list (_ListRun)
-            _TaskInsertListRun(*chan._receivers.next);
+            _ListRunInsert(*chan._receivers.next);
         }
         
         return true;
@@ -407,7 +411,7 @@ public:
         if (chan.empty()) {
             _ListRemoverChannel cleanupChannel = chan._receivers.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (deadline) cleanupDeadline = _TaskInsertListDeadline(*deadline);
+            if (deadline) cleanupDeadline = _ListDeadlineInsert(*deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -426,7 +430,7 @@ public:
         // If there's a sender, wake it
         if (!chan._senders.empty()) {
             // Insert task into the beginning of the runnable list (_ListRun)
-            _TaskInsertListRun(*chan._senders.next);
+            _ListRunInsert(*chan._senders.next);
         }
         return val;
     }
