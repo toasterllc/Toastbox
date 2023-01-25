@@ -274,15 +274,15 @@ public:
             sp -= _SchedulerStackSaveRegCount;
         }
         
-        // Enable interrupts
-        IntState::Set(true);
+        // Disable interrupts by default, so that scheduler bookkeeping isn't interrupted
+        IntState::Set(false);
         
         for (;;) {
-            #warning TODO: we need to revisit our interrupt strategy here, because while we're accessing _ListRun, Tick() could be called
-            
             // Iterate over `_ListRun` a single time, running each task once
             _TaskCurr = static_cast<_Task*>(_ListRun.next);
             while (_TaskCurr != &_ListRun) {
+                // Enable interrupts while we call into tasks
+                IntState ints(true);
                 _TaskSwap();
                 
                 // Check stack guards
@@ -305,6 +305,37 @@ public:
         _TaskYield();
     }
     
+    // _TaskInsertListDeadline(): insert task into deadline list
+    static void _TaskInsertListDeadline(Deadline deadline) {
+        _TaskCurr->wakeDeadline = deadline;
+        
+        // Insert `_TaskCurr` into the appropriate point in `_ListDeadline`
+        // (depending on its wakeDeadline)
+        const Ticks delta = deadline-_ISR.CurrentTime;
+        _ListDeadlineType* insert = &_ListDeadline;
+        for (;;) {
+            _ListDeadlineType*const i = insert->next;
+            // If we're at the end of the list, we're done
+            if (i == &_ListDeadline) break;
+            const _Task& t = static_cast<_Task&>(*i);
+            const Ticks d = *t.wakeDeadline - _ISR.CurrentTime;
+            // Use >= instead of > so that we attach the task at the earliest
+            // available slot, to minimize our computation.
+            if (delta >= d) break;
+            insert = i;
+        }
+        
+        insert->push(*_TaskCurr);
+    }
+    
+    // _TaskInsertListRun(): insert task into runnable list
+    template <typename T>
+    static void _TaskInsertListRun(T& t) {
+        _Task& task = static_cast<_Task&>(t);
+        // Insert task into the beginning of the runnable list (_ListRun)
+        _ListRun.push(task);
+    }
+    
     template <typename T>
     static void Send(T& chan, const typename T::Type& val) {
         Send(chan, val, std::nullopt);
@@ -322,25 +353,7 @@ public:
             chan._senders.push(*_TaskCurr);
             
             if (deadline) {
-                _TaskCurr->wakeDeadline = deadline;
-                
-                // Insert `_TaskCurr` into the appropriate point in `_ListDeadline`
-                // (depending on its wakeDeadline)
-                const Ticks delta = *deadline-_ISR.CurrentTime;
-                auto* insert = &_ListDeadline;
-                for (;;) {
-                    auto*const i = insert->next;
-                    // If we're at the end of the list, we're done
-                    if (i == &_ListDeadline) break;
-                    const _Task& t = static_cast<_Task&>(*i);
-                    const Ticks d = *t.wakeDeadline - _ISR.CurrentTime;
-                    // Use >= instead of > so that we attach the task at the earliest
-                    // available slot, to minimize our computation.
-                    if (delta >= d) break;
-                    insert = i;
-                }
-                
-                insert->push(*_TaskCurr);
+                _TaskInsertListDeadline(*deadline);
             }
             
             for (;;) {
@@ -359,9 +372,8 @@ public:
         
         // If there's a receiver, wake it
         if (!chan._receivers.empty()) {
-            _Task& task = static_cast<_Task&>(*chan._receivers.next);
             // Insert task into the beginning of the runnable list (_ListRun)
-            _ListRun.push(task);
+            _TaskInsertListRun(*chan._receivers.next);
         }
         
         return true;
@@ -376,26 +388,36 @@ public:
     // Buffered receive
     template <typename T>
     static std::optional<typename T::Type> Recv(T& chan, std::optional<Deadline> deadline) {
-        return std::nullopt;
-//        IntState ints(false);
-//        
-//        while (chan.empty()) {
-//            chan._receivers.push(*_TaskCurr);
-//            const _WakeReason reason = _TaskSleep(deadline);
-//            // If we awoke because the deadline passed, return immediately
-//            if (reason == _WakeReason::Deadline) return std::nullopt;
-//        }
-//        
-//        const typename T::Type& val = chan._q[chan._r];
-//        chan._r++;
-//        if (chan._r == T::Cap) chan._r = 0;
-//        chan._full = false;
-//        
-//        // If there's a sender, wake it
-//        if (!chan._senders.empty()) {
-//            _TaskWake(*chan._senders.next, _WakeReason::Event);
-//        }
-//        return val;
+        IntState ints(false);
+        
+        if (chan.empty()) {
+            #warning TODO: make sure to remove ourself from chan._senders / _ListDeadline upon return
+            chan._receivers.push(*_TaskCurr);
+            
+            if (deadline) {
+                _TaskInsertListDeadline(*deadline);
+            }
+            
+            for (;;) {
+                _TaskSleep();
+                // Check if channel can receive
+                if (!chan.empty()) break;
+                // Check for timeout
+                else if (!_TaskCurr->wakeDeadline) return std::nullopt;
+            }
+        }
+        
+        const typename T::Type& val = chan._q[chan._r];
+        chan._r++;
+        if (chan._r == T::Cap) chan._r = 0;
+        chan._full = false;
+        
+        // If there's a sender, wake it
+        if (!chan._senders.empty()) {
+            // Insert task into the beginning of the runnable list (_ListRun)
+            _TaskInsertListRun(*chan._senders.next);
+        }
+        return val;
     }
     
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
