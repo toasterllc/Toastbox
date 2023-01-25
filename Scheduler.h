@@ -243,7 +243,7 @@ private:
         _TaskFn run = nullptr;
         void* sp = nullptr;
         std::optional<Deadline> wakeDeadline;
-        _StackGuard& stackGuard;
+        _StackGuard* stackGuard = nullptr;
         
         auto& listRun() { return static_cast<_ListRunType&>(*this); }
         auto& listDeadline() { return static_cast<_ListDeadlineType&>(*this); }
@@ -284,7 +284,7 @@ public:
         for (_Task& task : _Tasks) {
             // Initialize the task's stack guard
             if constexpr ((bool)T_StackGuardCount) {
-                _StackGuardInit(task.stackGuard);
+                _StackGuardInit(*task.stackGuard);
             }
             
             const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
@@ -299,7 +299,7 @@ public:
             sp -= _SchedulerStackSaveRegCount;
         }
         
-        _Task junk = { .stackGuard = _SchedulerStackGuard };
+        _Task junk;
         _TaskCurr = &junk;
         __TaskSwap();
         for (;;);
@@ -556,7 +556,7 @@ private:
         // Check stack guards
         if constexpr ((bool)T_StackGuardCount) {
             _StackGuardCheck(_SchedulerStackGuard);
-            _StackGuardCheck(_TaskCurr->stackGuard);
+            _StackGuardCheck(*_TaskCurr->stackGuard);
         }
         
         #warning TODO: we should disable interrupts while we do this _ListRun bookkeeping
@@ -646,7 +646,7 @@ private:
                 },
                 .run        = T_Tasks::Run,
                 .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
-                .stackGuard = *(_StackGuard*)T_Tasks::Stack,
+                .stackGuard = (_StackGuard*)T_Tasks::Stack,
             }...,
         };
     }
