@@ -163,8 +163,8 @@ template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
     void T_Sleep(),                     // T_Sleep: function to put processor to sleep; invoked when no tasks have work to do
     void T_Error(uint16_t),             // T_Error: function to call upon an unrecoverable error (eg stack overflow)
-    auto T_MainStack,                   // T_MainStack: main stack pointer (only used to monitor main stack for overflow; unused if T_StackGuardCount==0)
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
+    typename T_SchedulerTask,
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
@@ -183,6 +183,24 @@ private:
         T* next = static_cast<T*>(this);
         
         bool empty() const { return next==this; }
+        
+//        template <typename T_List>
+//        void meow(T& l) {
+//        }
+        
+        
+//        T& push(T& l) {
+//            // Ensure that the element isn't a part of any list before we attach it
+//            T& x = static_cast<T&>(*this);
+//            x._pop();
+//            
+//            T& r = *l.next;
+//            x.prev = &l;
+//            x.next = &r;
+//            l.next = &x;
+//            r.prev = &x;
+//            return x;
+//        }
         
         template <typename T_Elm>
         T& push(T_Elm& elm) {
@@ -259,7 +277,7 @@ public:
     static void Run() {
         // Initialize the main stack guard
         if constexpr ((bool)T_StackGuardCount) {
-            _StackGuardInit(_MainStackGuard);
+            _StackGuardInit(_SchedulerStackGuard);
         }
         
         // Prepare every task
@@ -294,7 +312,7 @@ public:
                 
                 // Check stack guards
                 if constexpr ((bool)T_StackGuardCount) {
-                    _StackGuardCheck(_MainStackGuard);
+                    _StackGuardCheck(_SchedulerStackGuard);
                     _StackGuardCheck(_TaskCurr->stackGuard);
                 }
                 
@@ -583,10 +601,10 @@ private:
     
     static inline std::array<_Task,_TaskCount> _Tasks = _TasksGet();
     
-    // _MainStackGuard: ideally this would be `static constexpr` instead of `static inline`,
-    // but C++ doesn't allow constexpr reinterpret_cast.
+    // _SchedulerStackGuard: ideally this would be `static constexpr` instead of
+    // `static inline`, but C++ doesn't allow constexpr reinterpret_cast.
     // In C++20 we could use std::bit_cast for this.
-    static inline _StackGuard& _MainStackGuard = *(_StackGuard*)T_MainStack;
+    static inline _StackGuard& _SchedulerStackGuard = *(_StackGuard*)T_SchedulerTask::Stack;
     
     static inline _Task* _TaskCurr = nullptr;
     static inline _Task* _TaskNext = nullptr;
