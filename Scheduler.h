@@ -340,6 +340,7 @@ public:
         _TaskYield();
     }
     
+    // _ListRemover: removes the element from the linked list upon destruction
     template <typename T>
     class _ListRemover {
     public:
