@@ -342,23 +342,30 @@ public:
         return insert->push(task);
     }
     
-    template <typename T>
-    static void Send(T& chan, const typename T::Type& val) {
-        Send(chan, val, std::nullopt);
-    }
-    
-    #warning TODO: implement version of Send() / Recv() that doesn't block so it can be used from the interrupt context
+    enum class BlockStyle : uint8_t {
+        Blocking,
+        Nonblocking,
+        Deadline,
+    };
     
     #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
     // Buffered send
     template <typename T>
-    static bool Send(T& chan, const typename T::Type& val, std::optional<Deadline> deadline) {
+    static bool Send(T& chan, const typename T::Type& val,
+        BlockStyle block=BlockStyle::Blocking, Deadline deadline=0) {
+        
         IntState ints(false);
         
+        // If we're non-blocking and the channel is full, return immediately
+        if (block==BlockStyle::Nonblocking && chan.full()) {
+            return false;
+        }
+        
+        // Wait until the channel isn't full
         if (chan.full()) {
             _ListRemoverChannel cleanupChannel = chan._senders.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
+            if (block == BlockStyle::Deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -369,6 +376,7 @@ public:
             }
         }
         
+        // Clear to send!
         chan._q[chan._w] = val;
         chan._w++;
         if (chan._w == T::Cap) chan._w = 0;
@@ -383,20 +391,22 @@ public:
         return true;
     }
     
-    template <typename T>
-    static typename T::Type Recv(T& chan) {
-        return *Recv(chan, std::nullopt);
-    }
-    
     // Buffered receive
     template <typename T>
-    static std::optional<typename T::Type> Recv(T& chan, std::optional<Deadline> deadline) {
+    static std::optional<typename T::Type> Recv(T& chan,
+        BlockStyle block=BlockStyle::Blocking, Deadline deadline=0) {
+        
         IntState ints(false);
+        
+        // If we're non-blocking and the channel is empty, return immediately
+        if (block==BlockStyle::Nonblocking && chan.empty()) {
+            return std::nullopt;
+        }
         
         if (chan.empty()) {
             _ListRemoverChannel cleanupChannel = chan._receivers.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
+            if (block == BlockStyle::Deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, deadline);
             
             for (;;) {
                 _TaskSleep();
