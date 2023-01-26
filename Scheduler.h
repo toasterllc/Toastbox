@@ -235,7 +235,6 @@ private:
     };
     
 public:
-    
     // MARK: - Channel
     
     template <typename T_Type, size_t T_Cap=0>
@@ -288,58 +287,8 @@ public:
     
     // Yield(): yield current task to the scheduler
     static void Yield() {
-        // Return to scheduler
+        IntState ints(false);
         _TaskYield();
-    }
-    
-    // _ListRemover: removes the element from the linked list upon destruction
-    template <typename T>
-    class _ListRemover {
-    public:
-        _ListRemover() {}
-        _ListRemover(T& x) : _x(&x) {}
-        _ListRemover(const _ListRemover& x)             = delete;
-        _ListRemover& operator=(const _ListRemover& x)  = delete;
-        _ListRemover(_ListRemover&& x)                  { swap(x); }
-        _ListRemover& operator=(_ListRemover&& x)       { swap(x); return *this; }
-        ~_ListRemover() { if (_x) _x->pop(); }
-        void swap(_ListRemover& x) { std::swap(_x, x._x); }
-    private:
-        T* _x = nullptr;
-    };
-    
-    using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
-    using _ListRemoverChannel = _ListRemover<_ListChannelType>;
-    
-    // _ListRunInsert(): insert task into runnable list
-    template <typename T>
-    static void _ListRunInsert(T& t) {
-        _Task& task = static_cast<_Task&>(t);
-        // Insert task into the beginning of the runnable list (_ListRun)
-        _ListRun.push(task);
-    }
-    
-    // _ListDeadlineInsert(): insert task into deadline list, so that it's awoken
-    // when the deadline arrives.
-    static _ListDeadlineType& _ListDeadlineInsert(_Task& task, Deadline deadline) {
-        task.wakeDeadline = deadline;
-        
-        // Insert `task` into the appropriate point in `_ListDeadline`
-        // (depending on its wakeDeadline)
-        const Ticks delta = deadline-_ISR.CurrentTime;
-        _ListDeadlineType* insert = &_ListDeadline;
-        for (;;) {
-            _ListDeadlineType*const i = insert->next;
-            // If we're at the end of the list, we're done
-            if (i == &_ListDeadline) break;
-            const _Task& t = static_cast<_Task&>(*i);
-            const Ticks d = *t.wakeDeadline - _ISR.CurrentTime;
-            // Use >= instead of > so that we attach the task at the earliest
-            // available slot, to minimize our computation.
-            if (delta >= d) break;
-            insert = i;
-        }
-        return insert->push(task);
     }
     
     enum class BlockStyle : uint8_t {
@@ -435,9 +384,8 @@ public:
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
-        // IntState:
-        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR
-        //   - int state must be restored upon return because scheduler clobbers it
+        // Ints must be disabled to prevent racing against Tick()
+        // ISR in accessing _ISR.CurrentTime
         IntState ints(false);
         _ListDeadlineInsert(*_TaskCurr, _ISR.CurrentTime+ticks);
         _TaskSleep();
@@ -477,19 +425,17 @@ public:
     }
     
     static Ticks CurrentTime() {
-        // IntState:
-        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
+        // Ints must be disabled to prevent racing against Tick()
+        // ISR in accessing _ISR.CurrentTime
         IntState ints(false);
         return _ISR.CurrentTime;
     }
     
 private:
     // MARK: - Types
-    
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
     
     // MARK: - Stack Guard
-    
     static void _StackGuardInit(_StackGuard& guard) {
         for (uintptr_t& x : guard) {
             x = _StackGuardMagicNumber;
@@ -504,6 +450,61 @@ private:
         }
     }
     
+    // _ListRemover: removes the element from the linked list upon destruction
+    template <typename T>
+    class _ListRemover {
+    public:
+        _ListRemover() {}
+        _ListRemover(T& x) : _x(&x) {}
+        _ListRemover(const _ListRemover& x)             = delete;
+        _ListRemover& operator=(const _ListRemover& x)  = delete;
+        _ListRemover(_ListRemover&& x)                  { swap(x); }
+        _ListRemover& operator=(_ListRemover&& x)       { swap(x); return *this; }
+        ~_ListRemover() { if (_x) _x->pop(); }
+        void swap(_ListRemover& x) { std::swap(_x, x._x); }
+    private:
+        T* _x = nullptr;
+    };
+    
+    using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
+    using _ListRemoverChannel = _ListRemover<_ListChannelType>;
+    
+    // _ListRunInsert(): insert task into runnable list
+    // Ints must be disabled
+    template <typename T>
+    static void _ListRunInsert(T& t) {
+        _Task& task = static_cast<_Task&>(t);
+        // Insert task into the beginning of the runnable list (_ListRun)
+        _ListRun.push(task);
+    }
+    
+    // _ListDeadlineInsert(): insert task into deadline list, so that it's awoken
+    // when the deadline arrives.
+    // Ints must be disabled
+    static _ListDeadlineType& _ListDeadlineInsert(_Task& task, Deadline deadline) {
+        task.wakeDeadline = deadline;
+        
+        // Insert `task` into the appropriate point in `_ListDeadline`
+        // (depending on its wakeDeadline)
+        const Ticks delta = deadline-_ISR.CurrentTime;
+        _ListDeadlineType* insert = &_ListDeadline;
+        for (;;) {
+            _ListDeadlineType*const i = insert->next;
+            // If we're at the end of the list, we're done
+            if (i == &_ListDeadline) break;
+            const _Task& t = static_cast<_Task&>(*i);
+            const Ticks d = *t.wakeDeadline - _ISR.CurrentTime;
+            // Use >= instead of > so that we attach the task at the earliest
+            // available slot, to minimize our computation.
+            if (delta >= d) break;
+            insert = i;
+        }
+        return insert->push(task);
+    }
+    
+    // _TaskSleep(): remove the current task from the runnable list of tasks,
+    // and switch to the next task.
+    // Ints must be disabled
     static void _TaskSleep() {
         // Get _TaskCurr's entry in _ListRun
         _ListRunType& listRun = _TaskCurr->listRun();
@@ -516,6 +517,9 @@ private:
         _TaskSwap();
     }
     
+    // _TaskYield(): switch to the next task without changing the runnability
+    // of the current task.
+    // Ints must be disabled
     static void _TaskYield() {
         // Update _TaskNext to be the task after _TaskCurr
         _TaskNext = static_cast<_Task*>(_TaskCurr->listRun().next);
@@ -524,6 +528,7 @@ private:
     }
     
     // _TaskSwap(): saves _TaskCurr and restores _TaskNext
+    // Ints must be disabled
     static void _TaskSwap() {
         // Check stack guards
         if constexpr (_StackGuardEnabled) _StackGuardCheck(*_TaskCurr->stackGuard);
