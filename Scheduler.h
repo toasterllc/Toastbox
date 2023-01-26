@@ -172,13 +172,7 @@ template <
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
-public:
-    using Ticks     = unsigned int;
-    using Deadline  = Ticks;
-
 private:
-    struct _Task;
-    
     template <typename T>
     struct _List {
         T* prev = static_cast<T*>(this);
@@ -219,24 +213,11 @@ private:
     struct _ListDeadlineType : _List<_ListDeadlineType> {};
     struct _ListChannelType : _List<_ListChannelType> {};
     
-    using _StackGuard = uintptr_t[T_StackGuardCount];
-    
-    using _TaskFn = void(*)();
-    
-    struct _Task : _ListRunType, _ListDeadlineType, _ListChannelType {
-        _TaskFn run = nullptr;
-        void* sp = nullptr;
-        std::optional<Deadline> wakeDeadline;
-        _StackGuard* stackGuard = nullptr;
-        
-        auto& listRun() { return static_cast<_ListRunType&>(*this); }
-        auto& listDeadline() { return static_cast<_ListDeadlineType&>(*this); }
-        auto& listChannel() { return static_cast<_ListChannelType&>(*this); }
-    };
-    
 public:
-    // MARK: - Channel
+    using Ticks     = unsigned int;
+    using Deadline  = Ticks;
     
+    // MARK: - Channel
     template <typename T_Type, size_t T_Cap=0>
     class Channel {
     public:
@@ -434,6 +415,20 @@ public:
 private:
     // MARK: - Types
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
+    using _StackGuard = uintptr_t[T_StackGuardCount];
+    
+    using _TaskFn = void(*)();
+    
+    struct _Task : _ListRunType, _ListDeadlineType, _ListChannelType {
+        _TaskFn run = nullptr;
+        void* sp = nullptr;
+        std::optional<Deadline> wakeDeadline;
+        _StackGuard* stackGuard = nullptr;
+        
+        auto& listRun() { return static_cast<_ListRunType&>(*this); }
+        auto& listDeadline() { return static_cast<_ListDeadlineType&>(*this); }
+        auto& listChannel() { return static_cast<_ListChannelType&>(*this); }
+    };
     
     // MARK: - Stack Guard
     static void _StackGuardInit(_StackGuard& guard) {
