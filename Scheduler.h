@@ -534,7 +534,6 @@ private:
         if constexpr (_StackGuardEnabled) _StackGuardCheck(*_TaskCurr->stackGuard);
         if constexpr (_InterruptStackGuardEnabled) _StackGuardCheck(_InterruptStackGuard);
         
-        #warning TODO: we should disable interrupts while we do this _ListRun bookkeeping
         // Sleep until we have a task to run
         while (_ListRun.empty()) T_Sleep();
         
