@@ -114,7 +114,7 @@ private:
     
 #else
     
-    #error Task: Unsupported architecture
+    #error Task: Unspecified or unsupported architecture
     
 #endif
 
