@@ -236,6 +236,13 @@ public:
         _ListChannelType _receivers;
     };
     
+    // MARK: - BlockStyle
+    enum class BlockStyle : uint8_t {
+        Blocking,
+        Nonblocking,
+        Deadline,
+    };
+    
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
@@ -259,9 +266,11 @@ public:
         // Initialize the interrupt stack guard
         if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
         
+        // junk: dummy task that _TaskSwap saves the current stack pointer to,
+        // which is thrown away.
         _Task junk = { .stackGuard = _Tasks[0].stackGuard };
         _TaskCurr = &junk;
-        _TaskNext = &_Tasks[0];
+        // _TaskNext is statically initialized to &_Tasks[0]
         _TaskSwap();
         for (;;);
     }
@@ -271,12 +280,6 @@ public:
         IntState ints(false);
         _TaskYield();
     }
-    
-    enum class BlockStyle : uint8_t {
-        Blocking,
-        Nonblocking,
-        Deadline,
-    };
     
     #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
     // Buffered send
@@ -603,7 +606,7 @@ private:
     static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
     
     static inline _Task* _TaskCurr = nullptr;
-    static inline _Task* _TaskNext = nullptr;
+    static inline _Task* _TaskNext = &_Tasks[0];
     static inline _ListRunType _ListRun = {
         _List<_ListRunType>{
             .prev = &_Tasks[_TaskCount-1],
