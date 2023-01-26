@@ -218,7 +218,7 @@ public:
             sp -= extra;
             // Push initial return address == task.run address == Task::Run
             sp--;
-            *sp = (void*)task.run;
+            *sp = (void*)_TaskRun;
             // Push registers that _SchedulerTaskSwap() expects to be saved on the stack.
             // We don't care about what values the registers contain since they're not actually used.
             sp -= _SchedulerStackSaveRegCount;
@@ -381,7 +381,9 @@ private:
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
     using _StackGuard = uintptr_t[T_StackGuardCount];
     
-    using _TaskFn = void(*)();
+    // We have to use __attribute__((noreturn)) instead of [[noreturn]]
+    // because [[noreturn]] can't be applied to types.
+    using _TaskFn = __attribute__((noreturn)) void(*)();
     
     struct _Task : _ListRunType, _ListDeadlineType, _ListChannelType {
         _TaskFn run = nullptr;
@@ -461,6 +463,13 @@ private:
         return insert->push(task);
     }
     
+    [[noreturn]]
+    static void _TaskRun() {
+        // Enable interrupts before entering the task for the first time
+        IntState::Set(true);
+        _TaskCurr->run();
+    }
+    
     // _TaskSleep(): remove the current task from the runnable list of tasks,
     // and switch to the next task.
     // Ints must be disabled
@@ -501,10 +510,6 @@ private:
         }
         
         std::swap(_TaskCurr, _TaskNext);
-        // IntState: enable interrupts before entering the next task,
-        // and restore the interrupt state to whatever it was when
-        // _TaskSwap() was called.
-        IntState ints(true);
         __TaskSwap();
     }
     
@@ -547,7 +552,7 @@ private:
                         .next = (T_Idx==_TaskCount-1 ?  &_ListRun : &_Tasks[T_Idx+1]),
                     }
                 },
-                .run        = T_Tasks::Run,
+                .run        = (_TaskFn)T_Tasks::Run,
                 .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
                 .stackGuard = (_StackGuard*)T_Tasks::Stack,
             }...,
