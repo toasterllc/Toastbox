@@ -83,6 +83,9 @@ private:
 
 #elif defined(SchedulerARM32)
 
+#define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
+#define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that _SchedulerTaskSwap saves
+
 #define _SchedulerTaskSwap(spSave, spRestore)                                           \
                                                                                         \
     /* ## Architecture = ARM32 */                                                       \
