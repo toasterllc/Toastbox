@@ -60,6 +60,9 @@ private:
 
 #if defined(SchedulerMSP430)
 
+#define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
+#define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that _SchedulerTaskSwap saves
+
 #define _SchedulerTaskSwap(spSave, spRestore)                                           \
                                                                                         \
     if constexpr (sizeof(void*) == 2) {                                                 \
