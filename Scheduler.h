@@ -65,10 +65,10 @@ class Scheduler {
 private:
     template <typename T>
     struct _List {
-        T* prev = static_cast<T*>(this);
-        T* next = static_cast<T*>(this);
+        T* prev = nullptr;
+        T* next = nullptr;
         
-        bool empty() const { return next==this; }
+//        bool empty() const { return !prev && !next; }
         
         template <typename T_Elm>
         T& push(T_Elm& elm) {
@@ -77,25 +77,33 @@ private:
             x._pop();
             
             T& l = static_cast<T&>(*this);
-            T& r = *l.next;
+            T*const r = l.next;
             x.prev = &l;
-            x.next = &r;
+            x.next = r;
             l.next = &x;
-            r.prev = &x;
+            if (r) r->prev = &x;
             return x;
         }
         
         void pop() {
             _pop();
-            prev = static_cast<T*>(this);
-            next = static_cast<T*>(this);
+            prev = nullptr;
+            next = nullptr;
+        }
+        
+        // other(): returns another element in the list, or nullptr if there is no other element.
+        // Does not return the root element.
+        T* other() {
+            if (next) return next;
+            if (prev && prev->prev) return prev;
+            return nullptr;
         }
         
         void _pop() {
-            T& l = *prev;
-            T& r = *next;
-            l.next = &r;
-            r.prev = &l;
+            T*const l = prev;
+            T*const r = next;
+            if (l) l->next = r;
+            if (r) r->prev = l;
         }
     };
     
@@ -103,9 +111,8 @@ private:
     struct _ListDeadlineType : _List<_ListDeadlineType> {};
     struct _ListChannelType : _List<_ListChannelType> {};
     
-    // __TaskSwap(): saves current stack pointer into _TaskNext->sp and
-    // restores the stack pointer to _TaskCurr->sp (note that tasks must
-    // be swapped before calling)
+    // __TaskSwap(): saves current stack pointer into spSave and restores the stack
+    // pointer to spRestore.
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void __TaskSwap() {
         // __TaskSwap(): architecture-specific macro that swaps the current task
@@ -122,7 +129,7 @@ private:
 #if defined(SchedulerMSP430)
         // Architecture = MSP430
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that __TaskSwap() saves
+        #define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that we save below
         if constexpr (sizeof(void*) == 2) {
             // Small memory model
             asm volatile("pushm #7, r10" : : : );                           // (1)
@@ -141,7 +148,7 @@ private:
 #elif defined(SchedulerARM32)
         // Architecture = ARM32
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that __TaskSwap() saves
+        #define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that we save below
         asm volatile("push {r4-r11,lr}" : : : );                            // (1)
         asm volatile("str sp, %0" : "=m" (spSave) : : );                    // (2)
         asm volatile("ldr sp, %0" : : "m" (spRestore) : );                  // (3)
@@ -150,7 +157,7 @@ private:
 #elif defined(SchedulerAMD64)
         // Architecture = AMD64
         #define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that __TaskSwap() saves
+        #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that we save below
         asm volatile("push %%rbx" : : : );                                  // (1)
         asm volatile("push %%rbp" : : : );                                  // (1)
         asm volatile("push %%r12" : : : );                                  // (1)
@@ -177,7 +184,8 @@ public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
     
-    // Signal: empty type that can be used with channels when sending/receiving data isn't necessary
+    // Signal: empty type that can be used with channels; useful when
+    // signalling is necessary but data transfer is not
     using Signal = struct{ int _[0]; };
     static_assert(sizeof(Signal) == 0);
     
@@ -215,17 +223,7 @@ public:
         for (_Task& task : _Tasks) {
             // Initialize the task's stack guard
             if constexpr (_StackGuardEnabled) _StackGuardInit(*task.stackGuard);
-            
-            const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
-            void**& sp = *((void***)&task.sp);
-            // Push extra slots to ensure `_SchedulerStackAlign` alignment
-            sp -= extra;
-            // Push initial return address == task.run address == Task::Run
-            sp--;
-            *sp = (void*)_TaskRun;
-            // Push registers that __TaskSwap() expects to be saved on the stack.
-            // We don't care about what values the registers contain since they're not actually used.
-            sp -= _SchedulerStackSaveRegCount;
+            _TaskInit(task);
         }
         
         // Initialize the interrupt stack guard
@@ -235,15 +233,14 @@ public:
         // which is thrown away.
         _Task junk = { .stackGuard = _Tasks[0].stackGuard };
         _TaskCurr = &junk;
-        // _TaskNext is statically initialized to &_Tasks[0]
-        _TaskSwap();
+        _TaskSwap(false);
         for (;;);
     }
     
     // Yield(): yield current task to the scheduler
     static void Yield() {
         IntState ints(false);
-        _TaskYield();
+        _TaskSwap(false);
     }
     
     #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
@@ -267,7 +264,7 @@ public:
             if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
-                _TaskSleep();
+                _TaskSwap(true);
                 // Check if channel can send
                 if (!chan.full()) break;
                 // Check for timeout
@@ -282,7 +279,7 @@ public:
         if (chan._w == chan._r) chan._full = true;
         
         // If there's a receiver, wake it
-        if (!chan._receivers.empty()) {
+        if (chan._receivers.next) {
             // Insert task into the beginning of the runnable list (_ListRun)
             _ListRunInsert(*chan._receivers.next);
         }
@@ -309,7 +306,7 @@ public:
             if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
-                _TaskSleep();
+                _TaskSwap(true);
                 // Check if channel can receive
                 if (!chan.empty()) break;
                 // Check for timeout
@@ -323,7 +320,7 @@ public:
         chan._full = false;
         
         // If there's a sender, wake it
-        if (!chan._senders.empty()) {
+        if (chan._senders.next) {
             // Insert task into the beginning of the runnable list (_ListRun)
             _ListRunInsert(*chan._senders.next);
         }
@@ -339,7 +336,7 @@ public:
         chan._full = false;
         
         // If there's a sender, wake it
-        if (!chan._senders.empty()) {
+        if (chan._senders.next) {
             // Insert task into the beginning of the runnable list (_ListRun)
             _ListRunInsert(*chan._senders.next);
         }
@@ -354,7 +351,7 @@ public:
         // ISR in accessing _ISR.CurrentTime
         IntState ints(false);
         _ListDeadlineInsert(*_TaskCurr, _ISR.CurrentTime+ticks);
-        _TaskSleep();
+        _TaskSwap(true);
     }
     
     // Tick(): notify scheduler that a tick has passed
@@ -372,7 +369,7 @@ public:
         // wakeDeadline to CurrentTime+ticks (not CurrentTime+ticks+1), and
         // our logic here matches that math to ensure that we sleep at
         // least `ticks`.
-        for (auto* i=_ListDeadline.next; i!=&_ListDeadline;) {
+        for (_ListDeadlineType* i=_ListDeadline.next; i;) {
             _Task& task = static_cast<_Task&>(*i);
             if (*task.wakeDeadline != _ISR.CurrentTime) break;
             // Update `i` before we potentially wake the task, because
@@ -397,20 +394,82 @@ public:
         return _ISR.CurrentTime;
     }
     
-    // Stop<task>(): stops `task`
-    template <typename T_Task>
-    static void Stop() {
-        constexpr _Task& task = _GetTask<T_Task>();
-        IntState ints(false);
-        task.listRun().pop();
-        task.listDeadline().pop();
-        task.listChannel().pop();
-        // It's possible that the task was about to run because it was awoken to
-        // send/receive on a channel, but is now being stopped before it got the
-        // chance to run.
-        // To properly handle that case, we need to wake the subsequent task in
-        // the channel list.
-    }
+//    // _ChannelOtherElement(): returns a task other than `l`
+//    static _ListChannelType* _ChannelOtherElement(_ListChannelType& l) {
+//        if (l.next) return l.next;
+//        if (l.prev && l.prev->prev) return l.prev;
+//        return nullptr;
+//    }
+    
+//    // _ChannelOtherElement(): returns a task other than `l`
+//    static _ListChannelType* _ChannelOtherElement(_ListChannelType& l) {
+//        if (l.next) return l.next;
+//        if (l.prev && l.prev->prev) return l.prev;
+//        return nullptr;
+//    }
+    
+//    
+//    // Restart<T_Task>(): restarts `T_Task` in its Run() function
+//    template <typename T_Task>
+//    static void Restart() {
+//        constexpr _Task& task = _GetTask<T_Task>();
+//        IntState ints(false);
+//        task.listRun().pop();
+//        task.listDeadline().pop();
+//        
+//        // It's possible that the `task` was about to run because it was awoken to
+//        // send/receive on a channel, but is now being stopped before it got the
+//        // chance to run.
+//        // To properly handle that case, we need to wake the subsequent task in
+//        // the channel list.
+//        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
+//        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
+//        
+//        task.listChannel().pop();
+//        
+//        _TaskInit(task);
+//    }
+//    
+//    // Stop<T_Task>(): stops `T_Task`
+//    template <typename T_Task>
+//    static void Stop() {
+//        constexpr _Task& task = _GetTask<T_Task>();
+//        IntState ints(false);
+//        task.listRun().pop();
+//        task.listDeadline().pop();
+//        
+//        // It's possible that the `task` was about to run because it was awoken to
+//        // send/receive on a channel, but is now being stopped before it got the
+//        // chance to run.
+//        // To properly handle that case, we need to wake the subsequent task in
+//        // the channel list.
+//        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
+//        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
+//        
+//        task.listChannel().pop();
+//    }
+//    
+//    static void _TaskReset(_Task& task, bool run) {
+//        IntState ints(false);
+//        task.listDeadline().pop();
+//        
+//        // It's possible that the `task` was about to run because it was awoken to
+//        // send/receive on a channel, but is now being stopped before it got the
+//        // chance to run.
+//        // To properly handle that case, we need to wake the subsequent task in
+//        // the channel list.
+//        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
+//        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
+//        
+//        task.listChannel().pop();
+//        _TaskInit(task);
+//        
+//        if (run) {
+//            _ListRunInsert(task);
+//        } else {
+//            task.listRun().pop();
+//        }
+//    }
     
 private:
     // MARK: - Types
@@ -466,6 +525,19 @@ private:
     using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
     using _ListRemoverChannel = _ListRemover<_ListChannelType>;
     
+    static void _TaskInit(_Task& task) {
+        const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
+        void**& sp = *((void***)&task.sp);
+        // Push extra slots to ensure `_SchedulerStackAlign` alignment
+        sp -= extra;
+        // Push initial return address == task.run address == Task::Run
+        sp--;
+        *sp = (void*)_TaskRun;
+        // Push registers that __TaskSwap() expects to be saved on the stack.
+        // We don't care about what values the registers contain since they're not actually used.
+        sp -= _SchedulerStackSaveRegCount;
+    }
+    
     // _ListRunInsert(): insert task into runnable list
     // Ints must be disabled
     template <typename T>
@@ -488,7 +560,7 @@ private:
         for (;;) {
             _ListDeadlineType*const i = insert->next;
             // If we're at the end of the list, we're done
-            if (i == &_ListDeadline) break;
+            if (!i) break;
             const _Task& t = static_cast<_Task&>(*i);
             const Ticks d = *t.wakeDeadline - _ISR.CurrentTime;
             // Use >= instead of > so that we attach the task at the earliest
@@ -506,44 +578,25 @@ private:
         _TaskCurr->run();
     }
     
-    // _TaskSleep(): remove the current task from the runnable list of tasks,
-    // and switch to the next task.
-    // Ints must be disabled
-    static void _TaskSleep() {
-        // Get _TaskCurr's entry in _ListRun
-        _ListRunType& listRun = _TaskCurr->listRun();
-        // Update _TaskNext to be the task after _TaskCurr, before removing
-        // _TaskCurr from _ListRun
-        _TaskNext = static_cast<_Task*>(listRun.next);
-        // Remove _TaskCurr from _ListRun
-        listRun.pop();
-        // Return to scheduler
-        _TaskSwap();
-    }
-    
-    // _TaskYield(): switch to the next task without changing the runnability
-    // of the current task.
-    // Ints must be disabled
-    static void _TaskYield() {
-        // Update _TaskNext to be the task after _TaskCurr
-        _TaskNext = static_cast<_Task*>(_TaskCurr->listRun().next);
-        // Return to scheduler
-        _TaskSwap();
-    }
-    
     // _TaskSwap(): saves _TaskCurr and restores _TaskNext
     // Ints must be disabled
-    static void _TaskSwap() {
+    static void _TaskSwap(bool sleep) {
         // Check stack guards
         if constexpr (_StackGuardEnabled) _StackGuardCheck(*_TaskCurr->stackGuard);
         if constexpr (_InterruptStackGuardEnabled) _StackGuardCheck(_InterruptStackGuard);
         
-        // Sleep until we have a task to run
-        while (_ListRun.empty()) T_Sleep();
+        // Update _TaskNext to be the next task
+        _ListRunType& listRun = _TaskCurr->listRun();
+        _TaskNext = static_cast<_Task*>(listRun.next);
         
-        if (_TaskNext == &_ListRun) {
-            _TaskNext = static_cast<_Task*>(_ListRun.next);
-        }
+        // If the current task is going to sleep, remove it from _ListRun
+        if (sleep) listRun.pop();
+        
+        // Sleep while there are no tasks to run
+        while (!_ListRun.next) T_Sleep();
+        
+        // If _TaskNext reached the end of the list, restart it from the beginning
+        if (!_TaskNext) _TaskNext = static_cast<_Task*>(_ListRun.next);
         
         std::swap(_TaskCurr, _TaskNext);
         __TaskSwap();
@@ -585,7 +638,7 @@ private:
                 _ListRunType{
                     _List<_ListRunType>{
                         .prev = (T_Idx==0 ?             &_ListRun : &_Tasks[T_Idx-1]),
-                        .next = (T_Idx==_TaskCount-1 ?  &_ListRun : &_Tasks[T_Idx+1]),
+                        .next = (T_Idx==_TaskCount-1 ?  nullptr   : &_Tasks[T_Idx+1]),
                     }
                 },
                 .run        = (_TaskFn)T_Tasks::Run,
@@ -611,10 +664,9 @@ private:
     static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
     
     static inline _Task* _TaskCurr = nullptr;
-    static inline _Task* _TaskNext = &_Tasks[0];
+    static inline _Task* _TaskNext = nullptr;
     static inline _ListRunType _ListRun = {
         _List<_ListRunType>{
-            .prev = &_Tasks[_TaskCount-1],
             .next = &_Tasks[0],
         },
     };
