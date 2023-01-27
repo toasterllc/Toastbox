@@ -68,13 +68,11 @@ private:
         T* prev = nullptr;
         T* next = nullptr;
         
-//        bool empty() const { return !prev && !next; }
-        
         template <typename T_Elm>
         T& push(T_Elm& elm) {
             // Ensure that the element isn't a part of any list before we attach it
             T& x = static_cast<T&>(elm);
-            x._pop();
+            x._detach();
             
             T& l = static_cast<T&>(*this);
             T*const r = l.next;
@@ -86,20 +84,19 @@ private:
         }
         
         void pop() {
-            _pop();
-            prev = nullptr;
-            next = nullptr;
+            _detach();
+            *this = {};
         }
         
         // other(): returns another element in the list, or nullptr if there is no other element.
-        // Does not return the root element.
+        // Never returns the root element.
         T* other() {
             if (next) return next;
             if (prev && prev->prev) return prev;
             return nullptr;
         }
         
-        void _pop() {
+        void _detach() {
             T*const l = prev;
             T*const r = next;
             if (l) l->next = r;
@@ -223,7 +220,7 @@ public:
         for (_Task& task : _Tasks) {
             // Initialize the task's stack guard
             if constexpr (_StackGuardEnabled) _StackGuardInit(*task.stackGuard);
-            _TaskInit(task);
+            _TaskStackInit(task);
         }
         
         // Initialize the interrupt stack guard
@@ -394,82 +391,20 @@ public:
         return _ISR.CurrentTime;
     }
     
-//    // _ChannelOtherElement(): returns a task other than `l`
-//    static _ListChannelType* _ChannelOtherElement(_ListChannelType& l) {
-//        if (l.next) return l.next;
-//        if (l.prev && l.prev->prev) return l.prev;
-//        return nullptr;
-//    }
     
-//    // _ChannelOtherElement(): returns a task other than `l`
-//    static _ListChannelType* _ChannelOtherElement(_ListChannelType& l) {
-//        if (l.next) return l.next;
-//        if (l.prev && l.prev->prev) return l.prev;
-//        return nullptr;
-//    }
+    // Restart<T_Task>(): restarts `T_Task` in its Run() function
+    template <typename T_Task>
+    static void Restart() {
+        constexpr _Task& task = _GetTask<T_Task>();
+        _TaskInit(task, true);
+    }
     
-//    
-//    // Restart<T_Task>(): restarts `T_Task` in its Run() function
-//    template <typename T_Task>
-//    static void Restart() {
-//        constexpr _Task& task = _GetTask<T_Task>();
-//        IntState ints(false);
-//        task.listRun().pop();
-//        task.listDeadline().pop();
-//        
-//        // It's possible that the `task` was about to run because it was awoken to
-//        // send/receive on a channel, but is now being stopped before it got the
-//        // chance to run.
-//        // To properly handle that case, we need to wake the subsequent task in
-//        // the channel list.
-//        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
-//        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
-//        
-//        task.listChannel().pop();
-//        
-//        _TaskInit(task);
-//    }
-//    
-//    // Stop<T_Task>(): stops `T_Task`
-//    template <typename T_Task>
-//    static void Stop() {
-//        constexpr _Task& task = _GetTask<T_Task>();
-//        IntState ints(false);
-//        task.listRun().pop();
-//        task.listDeadline().pop();
-//        
-//        // It's possible that the `task` was about to run because it was awoken to
-//        // send/receive on a channel, but is now being stopped before it got the
-//        // chance to run.
-//        // To properly handle that case, we need to wake the subsequent task in
-//        // the channel list.
-//        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
-//        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
-//        
-//        task.listChannel().pop();
-//    }
-//    
-//    static void _TaskReset(_Task& task, bool run) {
-//        IntState ints(false);
-//        task.listDeadline().pop();
-//        
-//        // It's possible that the `task` was about to run because it was awoken to
-//        // send/receive on a channel, but is now being stopped before it got the
-//        // chance to run.
-//        // To properly handle that case, we need to wake the subsequent task in
-//        // the channel list.
-//        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
-//        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
-//        
-//        task.listChannel().pop();
-//        _TaskInit(task);
-//        
-//        if (run) {
-//            _ListRunInsert(task);
-//        } else {
-//            task.listRun().pop();
-//        }
-//    }
+    // Stop<T_Task>(): stops `T_Task`
+    template <typename T_Task>
+    static void Stop() {
+        constexpr _Task& task = _GetTask<T_Task>();
+        _TaskInit(task, false);
+    }
     
 private:
     // MARK: - Types
@@ -482,6 +417,7 @@ private:
     
     struct _Task : _ListRunType, _ListDeadlineType, _ListChannelType {
         _TaskFn run = nullptr;
+        void* spInit = nullptr;
         void* sp = nullptr;
         std::optional<Deadline> wakeDeadline;
         _StackGuard* stackGuard = nullptr;
@@ -525,9 +461,38 @@ private:
     using _ListRemoverDeadline = _ListRemover<_ListDeadlineType>;
     using _ListRemoverChannel = _ListRemover<_ListChannelType>;
     
-    static void _TaskInit(_Task& task) {
+    static void _TaskInit(_Task& task, bool run) {
+        IntState ints(false);
+        
+        // Remove task from deadline list
+        task.listDeadline().pop();
+        
+        // Remove task from channel list
+        // Before we do so, we need to find another task to wake from the same channel list.
+        // Waking this other task is necessary because it's possible that `task` was about to run
+        // because it was awoken to send/receive on a channel, but is now being reset before it
+        // got the chance to run. To properly handle that case, we need to wake the subsequent
+        // task in the channel list, otherwise there'd be a task waiting to send/receive even
+        // though sending/receiving was possible.
+        _Task*const channelWakeTask = static_cast<_Task*>(task.listChannel().other());
+        task.listChannel().pop();
+        if (channelWakeTask) _ListRunInsert(*channelWakeTask);
+        
+        // Re-init the task's stack
+        _TaskStackInit(task);
+        
+        // Insert or remove the task from the runnable list, depending on `run`
+        if (run) _ListRunInsert(task);
+        else task.listRun().pop();
+    }
+    
+    // _TaskStackInit(): init the task's stack
+    // Ints must be disabled
+    static void _TaskStackInit(_Task& task) {
         const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
         void**& sp = *((void***)&task.sp);
+        // Reset stack pointer
+        sp = (void**)task.spInit;
         // Push extra slots to ensure `_SchedulerStackAlign` alignment
         sp -= extra;
         // Push initial return address == task.run address == Task::Run
@@ -642,7 +607,7 @@ private:
                     }
                 },
                 .run        = (_TaskFn)T_Tasks::Run,
-                .sp         = T_Tasks::Stack + sizeof(T_Tasks::Stack),
+                .spInit     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
                 .stackGuard = (_StackGuard*)T_Tasks::Stack,
             }...,
         };
