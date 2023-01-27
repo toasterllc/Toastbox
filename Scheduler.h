@@ -47,83 +47,6 @@ private:
     bool _prev = false;
 };
 
-// MARK: - TaskSwap
-
-// _SchedulerTaskSwap(): architecture-specific macro that swaps the current task
-// with a different task. Steps:
-//
-// (1) Push callee-saved regs onto stack (including $PC if needed for step #4 to work)
-// (2) Save $SP (stack pointer) into `spSave` (macro argument)
-// (3) Restore $SP (stack pointer) from `spRestore` (macro argument)
-// (4) Pop callee-saved registers from stack
-// (5) Return to caller
-
-#if defined(SchedulerMSP430)
-
-#define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-#define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that _SchedulerTaskSwap saves
-
-#define _SchedulerTaskSwap(spSave, spRestore)                                           \
-                                                                                        \
-    if constexpr (sizeof(void*) == 2) {                                                 \
-        /* ## Architecture = MSP430, small memory model */                              \
-        asm volatile("pushm #7, r10" : : : );                           /* (1) */       \
-        asm volatile("mov sp, %0" : "=m" (spSave) : : );                /* (2) */       \
-        asm volatile("mov %0, sp" : : "m" (spRestore) : );              /* (3) */       \
-        asm volatile("popm #7, r10" : : : );                            /* (4) */       \
-        asm volatile("ret" : : : );                                     /* (5) */       \
-    } else {                                                                            \
-        /* ## Architecture = MSP430, large memory model */                              \
-        asm volatile("pushm.a #7, r10" : : : );                         /* (1) */       \
-        asm volatile("mov.a sp, %0" : "=m" (spSave) : : );              /* (2) */       \
-        asm volatile("mov.a %0, sp" : : "m" (spRestore) : );            /* (3) */       \
-        asm volatile("popm.a #7, r10" : : : );                          /* (4) */       \
-        asm volatile("ret.a" : : : );                                   /* (5) */       \
-    }
-
-#elif defined(SchedulerARM32)
-
-#define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-#define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that _SchedulerTaskSwap saves
-
-#define _SchedulerTaskSwap(spSave, spRestore)                                           \
-                                                                                        \
-    /* ## Architecture = ARM32 */                                                       \
-    asm volatile("push {r4-r11,lr}" : : : );                            /* (1) */       \
-    asm volatile("str sp, %0" : "=m" (spSave) : : );                    /* (2) */       \
-    asm volatile("ldr sp, %0" : : "m" (spRestore) : );                  /* (3) */       \
-    asm volatile("pop {r4-r11,lr}" : : : );                             /* (4) */       \
-    asm volatile("bx lr" : : : );                                       /* (5) */       \
-    
-#elif defined(SchedulerAMD64)
-
-#define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
-#define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that _SchedulerTaskSwap saves
-#define _SchedulerTaskSwap(spSave, spRestore)                                           \
-                                                                                        \
-    /* ## Architecture = AMD64 */                                                       \
-    asm volatile("push %%rbx" : : : );                                  /* (1) */       \
-    asm volatile("push %%rbp" : : : );                                  /* (1) */       \
-    asm volatile("push %%r12" : : : );                                  /* (1) */       \
-    asm volatile("push %%r13" : : : );                                  /* (1) */       \
-    asm volatile("push %%r14" : : : );                                  /* (1) */       \
-    asm volatile("push %%r15" : : : );                                  /* (1) */       \
-    asm volatile("mov %%rsp, %0" : "=m" (spSave) : : );                 /* (2) */       \
-    asm volatile("mov %0, %%rsp" : : "m" (spRestore) : );               /* (3) */       \
-    asm volatile("pop %%r15" : : : );                                   /* (4) */       \
-    asm volatile("pop %%r14" : : : );                                   /* (4) */       \
-    asm volatile("pop %%r13" : : : );                                   /* (4) */       \
-    asm volatile("pop %%r12" : : : );                                   /* (4) */       \
-    asm volatile("pop %%rbp" : : : );                                   /* (4) */       \
-    asm volatile("pop %%rbx" : : : );                                   /* (4) */       \
-    asm volatile("ret" : : : );                                         /* (5) */       \
-    
-#else
-    
-    #error Task: Unspecified or unsupported architecture
-    
-#endif
-
 // MARK: - Scheduler
 
 template <
@@ -180,6 +103,76 @@ private:
     struct _ListDeadlineType : _List<_ListDeadlineType> {};
     struct _ListChannelType : _List<_ListChannelType> {};
     
+    // __TaskSwap(): saves current stack pointer into _TaskNext->sp and
+    // restores the stack pointer to _TaskCurr->sp (note that tasks must
+    // be swapped before calling)
+    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
+    static void __TaskSwap() {
+        // __TaskSwap(): architecture-specific macro that swaps the current task
+        // with a different task. Steps:
+        //
+        // (1) Push callee-saved regs onto stack (including $PC if needed for step #4 to work)
+        // (2) Save $SP (stack pointer) into `spSave` (macro argument)
+        // (3) Restore $SP (stack pointer) from `spRestore` (macro argument)
+        // (4) Pop callee-saved registers from stack
+        // (5) Return to caller
+        #define spSave      _TaskNext->sp
+        #define spRestore   _TaskCurr->sp
+        
+#if defined(SchedulerMSP430)
+        // Architecture = MSP430
+        #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
+        #define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that __TaskSwap() saves
+        if constexpr (sizeof(void*) == 2) {
+            // Small memory model
+            asm volatile("pushm #7, r10" : : : );                           // (1)
+            asm volatile("mov sp, %0" : "=m" (spSave) : : );                // (2)
+            asm volatile("mov %0, sp" : : "m" (spRestore) : );              // (3)
+            asm volatile("popm #7, r10" : : : );                            // (4)
+            asm volatile("ret" : : : );                                     // (5)
+        } else {
+            // Large memory model
+            asm volatile("pushm.a #7, r10" : : : );                         // (1)
+            asm volatile("mov.a sp, %0" : "=m" (spSave) : : );              // (2)
+            asm volatile("mov.a %0, sp" : : "m" (spRestore) : );            // (3)
+            asm volatile("popm.a #7, r10" : : : );                          // (4)
+            asm volatile("ret.a" : : : );                                   // (5)
+        }
+#elif defined(SchedulerARM32)
+        // Architecture = ARM32
+        #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
+        #define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that __TaskSwap() saves
+        asm volatile("push {r4-r11,lr}" : : : );                            // (1)
+        asm volatile("str sp, %0" : "=m" (spSave) : : );                    // (2)
+        asm volatile("ldr sp, %0" : : "m" (spRestore) : );                  // (3)
+        asm volatile("pop {r4-r11,lr}" : : : );                             // (4)
+        asm volatile("bx lr" : : : );                                       // (5)
+#elif defined(SchedulerAMD64)
+        // Architecture = AMD64
+        #define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
+        #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that __TaskSwap() saves
+        asm volatile("push %%rbx" : : : );                                  // (1)
+        asm volatile("push %%rbp" : : : );                                  // (1)
+        asm volatile("push %%r12" : : : );                                  // (1)
+        asm volatile("push %%r13" : : : );                                  // (1)
+        asm volatile("push %%r14" : : : );                                  // (1)
+        asm volatile("push %%r15" : : : );                                  // (1)
+        asm volatile("mov %%rsp, %0" : "=m" (spSave) : : );                 // (2)
+        asm volatile("mov %0, %%rsp" : : "m" (spRestore) : );               // (3)
+        asm volatile("pop %%r15" : : : );                                   // (4)
+        asm volatile("pop %%r14" : : : );                                   // (4)
+        asm volatile("pop %%r13" : : : );                                   // (4)
+        asm volatile("pop %%r12" : : : );                                   // (4)
+        asm volatile("pop %%rbp" : : : );                                   // (4)
+        asm volatile("pop %%rbx" : : : );                                   // (4)
+        asm volatile("ret" : : : );                                         // (5)
+#else
+        #error Task: Unspecified or unsupported architecture
+#endif
+        #undef spSave
+        #undef spRestore
+    }
+    
 public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
@@ -230,7 +223,7 @@ public:
             // Push initial return address == task.run address == Task::Run
             sp--;
             *sp = (void*)_TaskRun;
-            // Push registers that _SchedulerTaskSwap() expects to be saved on the stack.
+            // Push registers that __TaskSwap() expects to be saved on the stack.
             // We don't care about what values the registers contain since they're not actually used.
             sp -= _SchedulerStackSaveRegCount;
         }
@@ -539,14 +532,6 @@ private:
         
         std::swap(_TaskCurr, _TaskNext);
         __TaskSwap();
-    }
-    
-    // __TaskSwap(): saves current stack pointer into _TaskNext->sp and
-    // restores the stack pointer to _TaskCurr->sp (note that tasks must
-    // be swapped before calling)
-    [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
-    static void __TaskSwap() {
-        _SchedulerTaskSwap(_TaskNext->sp, _TaskCurr->sp);
     }
     
     static std::optional<Deadline> _Deadline(BlockStyle block, Ticks ticks) {
