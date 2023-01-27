@@ -181,8 +181,12 @@ public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
     
+    // Signal: empty type that can be used with channels when sending/receiving data isn't necessary
+    using Signal = struct{ int _[0]; };
+    static_assert(sizeof(Signal) == 0);
+    
     // MARK: - Channel
-    template <typename T_Type, size_t T_Cap=0>
+    template <typename T_Type, size_t T_Cap=1>
     class Channel {
     public:
         using Type = T_Type;
@@ -204,6 +208,7 @@ public:
     enum class BlockStyle : uint8_t {
         Blocking,
         Nonblocking,
+        Duration,
         Deadline,
     };
     
@@ -249,7 +254,7 @@ public:
     // Buffered send
     template <typename T>
     static bool Send(T& chan, const typename T::Type& val,
-        BlockStyle block=BlockStyle::Blocking, Deadline deadline=0) {
+        BlockStyle block=BlockStyle::Blocking, Ticks ticks=0) {
         
         IntState ints(false);
         
@@ -260,9 +265,10 @@ public:
         
         // Wait until the channel isn't full
         if (chan.full()) {
+            const std::optional<Deadline> deadline = _Deadline(block, ticks);
             _ListRemoverChannel cleanupChannel = chan._senders.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (block == BlockStyle::Deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, deadline);
+            if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -291,7 +297,7 @@ public:
     // Buffered receive
     template <typename T>
     static std::optional<typename T::Type> Recv(T& chan,
-        BlockStyle block=BlockStyle::Blocking, Deadline deadline=0) {
+        BlockStyle block=BlockStyle::Blocking, Ticks ticks=0) {
         
         IntState ints(false);
         
@@ -301,9 +307,10 @@ public:
         }
         
         if (chan.empty()) {
+            const std::optional<Deadline> deadline = _Deadline(block, ticks);
             _ListRemoverChannel cleanupChannel = chan._receivers.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
-            if (block == BlockStyle::Deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, deadline);
+            if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
                 _TaskSleep();
@@ -325,6 +332,21 @@ public:
             _ListRunInsert(*chan._senders.next);
         }
         return val;
+    }
+    
+    template <typename T>
+    static void Clear(T& chan) {
+        IntState ints(false);
+        
+        chan._r = 0;
+        chan._w = 0;
+        chan._full = false;
+        
+        // If there's a sender, wake it
+        if (!chan._senders.empty()) {
+            // Insert task into the beginning of the runnable list (_ListRun)
+            _ListRunInsert(*chan._senders.next);
+        }
     }
     
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
@@ -522,6 +544,14 @@ private:
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void __TaskSwap() {
         _SchedulerTaskSwap(_TaskNext->sp, _TaskCurr->sp);
+    }
+    
+    static std::optional<Deadline> _Deadline(BlockStyle block, Ticks ticks) {
+        switch (block) {
+        case BlockStyle::Duration:  return _ISR.CurrentTime+ticks;
+        case BlockStyle::Deadline:  return ticks;
+        default:                    return std::nullopt;
+        }
     }
     
     static constexpr Ticks _TicksForUs(uint32_t us) {
