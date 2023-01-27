@@ -397,6 +397,21 @@ public:
         return _ISR.CurrentTime;
     }
     
+    // Stop<task>(): stops `task`
+    template <typename T_Task>
+    static void Stop() {
+        constexpr _Task& task = _GetTask<T_Task>();
+        IntState ints(false);
+        task.listRun().pop();
+        task.listDeadline().pop();
+        task.listChannel().pop();
+        // It's possible that the task was about to run because it was awoken to
+        // send/receive on a channel, but is now being stopped before it got the
+        // chance to run.
+        // To properly handle that case, we need to wake the subsequent task in
+        // the channel list.
+    }
+    
 private:
     // MARK: - Types
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
