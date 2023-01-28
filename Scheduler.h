@@ -193,6 +193,9 @@ public:
         using Type = T_Type;
         static constexpr size_t Cap = T_Cap;
         
+        Channel() {} // Constructor definition necessary to workaround compiler error:
+                     // "default member initializer for XXX required before
+                     // the end of its enclosing class"
         bool empty() const { return _w==_r && !_full; }
         bool full() const { return _full; }
         
@@ -413,10 +416,10 @@ private:
     
     // We have to use __attribute__((noreturn)) instead of [[noreturn]]
     // because [[noreturn]] can't be applied to types.
-    using _TaskFn = __attribute__((noreturn)) void(*)();
+    using _TaskFn = void(*)();
     
     struct _Task : _ListRunType, _ListDeadlineType, _ListChannelType {
-        _TaskFn run = nullptr;
+        __attribute__((noreturn)) _TaskFn run = nullptr;
         void* spInit = nullptr;
         void* sp = nullptr;
         std::optional<Deadline> wakeDeadline;
@@ -606,7 +609,7 @@ private:
                         .next = (T_Idx==_TaskCount-1 ?  nullptr   : &_Tasks[T_Idx+1]),
                     }
                 },
-                .run        = (_TaskFn)T_Tasks::Run,
+                .run        = (decltype(_Task::run))T_Tasks::Run,
                 .spInit     = T_Tasks::Stack + sizeof(T_Tasks::Stack),
                 .stackGuard = (_StackGuard*)T_Tasks::Stack,
             }...,
