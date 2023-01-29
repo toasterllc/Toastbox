@@ -5,6 +5,7 @@
 #include <optional>
 #include <algorithm>
 #include <array>
+#include <cstring>
 
 namespace Toastbox {
 
@@ -187,6 +188,18 @@ public:
     static_assert(sizeof(Signal) == 0);
     
     // MARK: - Channel
+    
+    struct _ChanState {
+        bool empty() const { return w==r && !f; }
+        bool full() const { return f; }
+        
+        size_t w = 0;
+        size_t r = 0;
+        bool f = false; // full
+        _ListChannelType senders;
+        _ListChannelType receivers;
+    };
+    
     template <typename T_Type, size_t T_Cap=1>
     class Channel {
     public:
@@ -196,16 +209,10 @@ public:
         Channel() {} // Constructor definition necessary to workaround compiler error:
                      // "default member initializer for XXX required before
                      // the end of its enclosing class"
-        bool empty() const { return _w==_r && !_full; }
-        bool full() const { return _full; }
         
 //    private:
         T_Type _q[std::max((size_t)1, T_Cap)];
-        size_t _w = 0;
-        size_t _r = 0;
-        bool _full = false;
-        _ListChannelType _senders;
-        _ListChannelType _receivers;
+        _ChanState _state;
     };
     
     // MARK: - BlockStyle
@@ -243,65 +250,59 @@ public:
         _TaskSwap(false);
     }
     
-    #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
-    // Buffered send
-    template <typename T>
-    static bool Send(T& chan, const typename T::Type& val,
-        BlockStyle block=BlockStyle::Blocking, Ticks ticks=0) {
-        
+    [[gnu::noinline]]
+    static bool _Send(_ChanState& cs, uint8_t* q, size_t cap, const uint8_t* val, size_t size, BlockStyle block, Ticks ticks) {
         IntState ints(false);
         
         // If we're non-blocking and the channel is full, return immediately
-        if (block==BlockStyle::Nonblocking && chan.full()) {
+        if (block==BlockStyle::Nonblocking && cs.full()) {
             return false;
         }
         
         // Wait until the channel isn't full
-        if (chan.full()) {
+        if (cs.full()) {
             const std::optional<Deadline> deadline = _Deadline(block, ticks);
-            _ListRemoverChannel cleanupChannel = chan._senders.push(*_TaskCurr);
+            _ListRemoverChannel cleanupChannel = cs.senders.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
             if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
             for (;;) {
                 _TaskSwap(true);
                 // Check if channel can send
-                if (!chan.full()) break;
+                if (!cs.full()) break;
                 // Check for timeout
                 else if (!_TaskCurr->wakeDeadline) return false;
             }
         }
         
         // Clear to send!
-        chan._q[chan._w] = val;
-        chan._w++;
-        if (chan._w == T::Cap) chan._w = 0;
-        if (chan._w == chan._r) chan._full = true;
+        memcpy(q+cs.w*size, val, size);
+        cs.w++;
+        if (cs.w == cap) cs.w = 0;
+        if (cs.w == cs.r) cs.f = true;
         
         // If there's a receiver, wake it
-        if (chan._receivers.next) {
+        if (cs.receivers.next) {
             // Insert task into the beginning of the runnable list (_ListRun)
-            _ListRunInsert(*chan._receivers.next);
+            _ListRunInsert(*cs.receivers.next);
         }
         
         return true;
     }
     
     // Buffered receive
-    template <typename T>
-    static std::optional<typename T::Type> Recv(T& chan,
-        BlockStyle block=BlockStyle::Blocking, Ticks ticks=0) {
-        
+    [[gnu::noinline]]
+    static bool _Recv(_ChanState& chan, uint8_t* q, size_t cap, uint8_t* val, size_t size, BlockStyle block, Ticks ticks) {
         IntState ints(false);
         
         // If we're non-blocking and the channel is empty, return immediately
         if (block==BlockStyle::Nonblocking && chan.empty()) {
-            return std::nullopt;
+            return false;
         }
         
         if (chan.empty()) {
             const std::optional<Deadline> deadline = _Deadline(block, ticks);
-            _ListRemoverChannel cleanupChannel = chan._receivers.push(*_TaskCurr);
+            _ListRemoverChannel cleanupChannel = chan.receivers.push(*_TaskCurr);
             _ListRemoverDeadline cleanupDeadline;
             if (deadline) cleanupDeadline = _ListDeadlineInsert(*_TaskCurr, *deadline);
             
@@ -310,20 +311,45 @@ public:
                 // Check if channel can receive
                 if (!chan.empty()) break;
                 // Check for timeout
-                else if (!_TaskCurr->wakeDeadline) return std::nullopt;
+                else if (!_TaskCurr->wakeDeadline) return false;
             }
         }
         
-        const typename T::Type& val = chan._q[chan._r];
-        chan._r++;
-        if (chan._r == T::Cap) chan._r = 0;
-        chan._full = false;
+        // Clear to receive!
+        memcpy(val, q+chan.w*size, size);
+        chan.r++;
+        if (chan.r == cap) chan.r = 0;
+        chan.f = false;
         
         // If there's a sender, wake it
-        if (chan._senders.next) {
+        if (chan.senders.next) {
             // Insert task into the beginning of the runnable list (_ListRun)
-            _ListRunInsert(*chan._senders.next);
+            _ListRunInsert(*chan.senders.next);
         }
+        return true;
+    }
+    
+    
+    
+    
+    
+    
+    #warning TODO: consider case where TaskA and TaskB are waiting to send on a channel (they're both in chan._senders). TaskA is awoken but it's stopped before it executes. In this case TaskB needs to be awoken to send, right?
+    // Buffered send
+    template <typename T>
+    static bool Send(T& chan, const typename T::Type& val,
+        BlockStyle block=BlockStyle::Blocking, Ticks ticks=0) {
+        return _Send(chan._state, (uint8_t*)chan._q, T::Cap, (uint8_t*)&val, sizeof(val), block, ticks);
+    }
+    
+    // Buffered receive
+    template <typename T>
+    static std::optional<typename T::Type> Recv(T& chan,
+        BlockStyle block=BlockStyle::Blocking, Ticks ticks=0) {
+        
+        typename T::Type val;
+        bool br = _Recv(chan._state, (uint8_t*)chan._q, T::Cap, (uint8_t*)&val, sizeof(val), block, ticks);
+        if (!br) return std::nullopt;
         return val;
     }
     
@@ -331,14 +357,14 @@ public:
     static void Clear(T& chan) {
         IntState ints(false);
         
-        chan._r = 0;
-        chan._w = 0;
-        chan._full = false;
+        chan._state.r = 0;
+        chan._state.w = 0;
+        chan._state.f = false;
         
         // If there's a sender, wake it
-        if (chan._senders.next) {
+        if (chan._state.senders.next) {
             // Insert task into the beginning of the runnable list (_ListRun)
-            _ListRunInsert(*chan._senders.next);
+            _ListRunInsert(*chan._state.senders.next);
         }
     }
     
