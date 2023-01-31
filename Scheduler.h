@@ -533,6 +533,22 @@ private:
         #undef spRestore
     }
     
+    // _TaskStackInit(): init the task's stack
+    // Ints must be disabled
+    static void _TaskStackInit(_Task& task) {
+        const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
+        void**& sp = *((void***)&task.sp);
+        // Reset stack pointer
+        sp = (void**)task.spInit;
+        // Push extra slots to ensure `_SchedulerStackAlign` alignment
+        sp -= extra;
+        // Push initial return address == task.run address == Task::Run
+        sp--;
+        *sp = (void*)_TaskRun;
+        // Push registers that __TaskSwap() expects to be saved on the stack.
+        // We don't care about what values the registers contain since they're not actually used.
+        sp -= _SchedulerStackSaveRegCount;
+    }
     
     
     
