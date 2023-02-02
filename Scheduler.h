@@ -182,6 +182,19 @@ public:
         task.wakeDeadline = std::nullopt;
     }
     
+    // Running<task>(): returns whether `task` is running
+    template <typename T_Task>
+    static bool Running() {
+        constexpr _Task& task = _TaskGet<T_Task>();
+        return task.runnable!=_RunnableFalse || task.wakeDeadline;
+    }
+    
+    // Wait<tasks>(): sleep current task until `tasks` all stop running
+    template <typename... T_Tsks>
+    static void Wait() {
+        Wait([] { return (!Running<T_Tsks>() && ...); });
+    }
+    
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
