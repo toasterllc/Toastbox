@@ -110,11 +110,11 @@ public:
         return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
     }
     
-//    // RunningAll<Tasks>(): returns whether all of `Tasks` are running
-//    template <typename T_Task, typename T_Task2, typename... T_Tsks>
-//    static void RunningAll() {
-//        return Running<T_Task>() && Running<T_Task2>() && (Running<T_Tsks>() && ...);
-//    }
+    // Running<Tasks>(): returns whether any of `Tasks` are running
+    template <typename... T_Tsks>
+    static void Wait() {
+        return Wait([] { return !Running<T_Tsks...>(); });
+    }
     
     // Run(): run the tasks indefinitely
     [[noreturn]]
@@ -271,9 +271,10 @@ public:
 private:
     // MARK: - Types
     
+    using _StackGuard = uintptr_t[T_StackGuardCount];
     static constexpr Ticks _TicksMax = std::numeric_limits<Ticks>::max();
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
-    using _StackGuard = uintptr_t[T_StackGuardCount];
+    static constexpr size_t _TaskCount = sizeof...(T_Tasks);
     
     struct _Task {
         _TaskFn run = nullptr;
@@ -450,10 +451,11 @@ private:
     }
     
     // _TaskGet(): returns the _Task& for the given T_Task
-    template <typename T_Task>
+    template <typename T_Task, size_t T_Delta=0>
     static constexpr _Task& _TaskGet() {
         static_assert((std::is_same_v<T_Task, T_Tasks> || ...), "invalid task");
-        return _Tasks[_ElmIdx<T_Task, T_Tasks...>()];
+        constexpr size_t idx = (_ElmIdx<T_Task, T_Tasks...>() + T_Delta) % _TaskCount;
+        return _Tasks[idx];
     }
     
     template <typename T_1, typename T_2=void, typename... T_s>
@@ -461,28 +463,15 @@ private:
         return std::is_same_v<T_1,T_2> ? 0 : 1 + _ElmIdx<T_1, T_s...>();
     }
     
-#warning TODO: remove public after finished debugging
-public:
-    static constexpr size_t _TaskCount = sizeof...(T_Tasks);
-    
-    template <size_t... T_Idx>
-    static constexpr std::array<_Task,_TaskCount> _TasksGet(std::integer_sequence<size_t, T_Idx...>) {
-        return {
-            _Task{
-                .run        = nullptr,
-                .runnable   = _RunnableFalse,
-                .sp         = nullptr,
-                .stackGuard = *(_StackGuard*)T_Tasks::Stack,
-                .next       = (T_Idx==_TaskCount-1 ? &_Tasks[0] : &_Tasks[T_Idx+1]),
-            }...,
-        };
-    }
-    
-    static constexpr std::array<_Task,_TaskCount> _TasksGet() {
-        return _TasksGet(std::make_integer_sequence<size_t, _TaskCount>{});
-    }
-    
-    static inline std::array<_Task,_TaskCount> _Tasks = _TasksGet();
+    static inline _Task _Tasks[_TaskCount] = {
+        _Task{
+            .run        = nullptr,
+            .runnable   = _RunnableFalse,
+            .sp         = nullptr,
+            .stackGuard = *(_StackGuard*)T_Tasks::Stack,
+            .next       = &_TaskGet<T_Tasks, 1>(),
+        }...,
+    };
     
     static constexpr bool _StackGuardEnabled = (bool)T_StackGuardCount;
     static constexpr bool _InterruptStackGuardEnabled =
