@@ -121,9 +121,6 @@ public:
     template <typename... T_Tsks>
     [[noreturn]]
     static void Run() {
-        // Start the given tasks
-        Start<T_Tsks...>();
-        
         // Initialize each task's stack guard
         if constexpr (_StackGuardEnabled) {
             for (_Task& task : _Tasks) {
@@ -133,6 +130,9 @@ public:
         
         // Initialize the interrupt stack guard
         if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
+        
+        // Start the given tasks
+        Start<T_Tsks...>();
         
         // junk: dummy task that _TaskSwap saves the current stack pointer to,
         // which is thrown away.
