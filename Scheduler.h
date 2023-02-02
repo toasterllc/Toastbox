@@ -167,17 +167,17 @@ public:
         constexpr size_t SaveRegCount = _SchedulerStackSaveRegCount+1;
         constexpr size_t ExtraRegCount = SaveRegCount % _SchedulerStackAlign;
         constexpr size_t TotalRegCount = SaveRegCount + ExtraRegCount;
-        constexpr void** StackEnd = (void**)(T_Task::Stack + sizeof(T_Task::Stack));
         constexpr _Task& task = _TaskGet<T_Task>();
+        void**const StackEnd = (void**)(T_Task::Stack + sizeof(T_Task::Stack));
         
         // Set task run function
         task.run = fn;
-        // Reset stack pointer
-        task.sp = StackEnd - TotalRegCount;
         // Make task runnable
         task.runnable = _RunnableTrue;
         // Reset wake deadline
         task.wakeDeadline = std::nullopt;
+        // Reset stack pointer
+        task.sp = StackEnd - TotalRegCount;
         // Push initial return address == _TaskRun
         *(StackEnd-ExtraRegCount-1) = (void*)_TaskRun;
     }
@@ -384,7 +384,7 @@ public:
         std::optional<Deadline> wakeDeadline;
         for (_Task& task : _Tasks) {
             if (!task.wakeDeadline) continue;
-            if (*task.wakeDeadline == wakeDeadline) {
+            if (*task.wakeDeadline == _ISR.CurrentTime) {
                 // The task's deadline has been hit; wake it
                 task.runnable = _RunnableTrue;
                 task.wakeDeadline = std::nullopt;
@@ -486,7 +486,6 @@ private:
 //        sp -= _SchedulerStackSaveRegCount;
 //    }
     
-    [[noreturn]]
     static void _TaskRun() {
         // Enable interrupts before entering the task for the first time
         IntState::Set(true);
@@ -514,6 +513,7 @@ private:
         // Update _TaskCurr's state
         _TaskCurr->runnable = fn;
         _TaskCurr->wakeDeadline = wake;
+        _ISR.WakeDeadlineUpdate = true;
         
         // Get the next runnable task, or sleep if no task wants to run
         while (!(_TaskNext = _TaskNextRunnable(_TaskCurr))) {
