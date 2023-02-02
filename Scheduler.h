@@ -151,25 +151,15 @@ public:
         #undef spRestore
     }
     
-//    // Start<task,fn>(): starts `task` running with `fn`
-//    template <typename T_Task, typename T_Fn>
-//    static void Start(T_Fn&& fn) {
-//        constexpr _Task& task = _TaskGet<T_Task>();
-//        task.run = fn;
-//        task.runnable = _RunnableTrue;
-//        task.sp = T_Task::Stack + sizeof(T_Task::Stack);
-//    }
-    
     // Start(): init the task's stack
     // Ints must be disabled
-    template <typename T_Task, typename T_Fn>
-    static void Start(T_Fn&& fn) {
+    template <typename T_Task>
+    static void Start(_TaskFn fn) {
         constexpr size_t SaveRegCount = _SchedulerStackSaveRegCount+1;
         constexpr size_t ExtraRegCount = SaveRegCount % _SchedulerStackAlign;
         constexpr size_t TotalRegCount = SaveRegCount + ExtraRegCount;
         constexpr _Task& task = _TaskGet<T_Task>();
         void**const StackEnd = (void**)(T_Task::Stack + sizeof(T_Task::Stack));
-        
         // Set task run function
         task.run = fn;
         // Make task runnable
@@ -192,13 +182,6 @@ public:
         task.wakeDeadline = std::nullopt;
     }
     
-//    // Running<task>(): returns whether `task` is running
-//    template <typename T_Task>
-//    static bool Running() {
-//        constexpr _Task& task = _TaskGet<T_Task>();
-//        return task.runnable != _RunnableFalse;
-//    }
-    
     // Run(): run the tasks indefinitely
     [[noreturn]]
     static void Run() {
@@ -218,43 +201,6 @@ public:
         _TaskCurr = &junk;
         _TaskSwap(nullptr);
         for (;;);
-        
-        
-//        for (;;) {
-//            do {
-//                _DidWork = false;
-//                
-//                for (_Task& task : _Tasks) {
-//                    // Disable ints before entering a task.
-//                    // We're not using an IntState here because we don't want the IntState dtor
-//                    // cleanup behavior when exiting our scope; we want to keep ints disabled
-//                    // across tasks.
-//                    IntState::Set(false);
-//                    
-//                    _CurrentTask = &task;
-//                    task.cont();
-//                    
-//                    // Check stack guards
-//                    if constexpr (T_StackGuardCount) {
-//                        _StackGuardCheck(task.stackGuard);
-//                    }
-//                }
-//            } while (_DidWork);
-//            
-//            // Reset _ISR.Wake now that we're assured that every task has been able to observe
-//            // _ISR.Wake=true while ints were disabled during the entire process.
-//            // (If ints were enabled, it's because we entered a task, and therefore
-//            // _DidWork=true. So if we get here, it's because _DidWork=false -> no tasks
-//            // were entered -> ints are still disabled.)
-//            _ISR.Wake = false;
-//            
-//            // No work to do
-//            // Go to sleep!
-//            T_Sleep();
-//            
-//            // Allow ints to fire
-//            IntState::Set(true);
-//        }
     }
     
     // Yield(): yield current task to the scheduler
@@ -262,8 +208,6 @@ public:
         IntState ints(false);
         // Return to scheduler
         _TaskSwap(_RunnableTrue);
-        // Return to task
-//        _TaskStartWork();
     }
     
     // Wait(fn): sleep current task until `fn` returns true.
@@ -283,7 +227,7 @@ public:
         _TaskSwap(fn);
     }
     
-    // Wait(): sleep current task until `fn` returns true, or `ticks` have passed.
+    // WaitDelay(): sleep current task until `fn` returns true, or `ticks` to pass.
     // See Wait() function above for more info.
     static bool WaitDelay(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
@@ -292,7 +236,7 @@ public:
         return (bool)_TaskCurr->wakeDeadline;
     }
     
-    // WaitUntil(): wait for a condition to become true, or for a deadline to pass.
+    // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
     //
     // For a deadline to be considered in the past, it must be in the range:
     //   [CurrentTime - TicksMax/2, CurrentTime]
@@ -337,12 +281,6 @@ public:
         return (bool)_TaskCurr->wakeDeadline;
     }
     
-//    // Wait<tasks>(): sleep current task until `tasks` all stop running
-//    template <typename... T_Tsks>
-//    static void Wait() {
-//        Wait([] { return (!Running<T_Tsks>() && ...); });
-//    }
-    
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
     static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
     
@@ -353,27 +291,9 @@ public:
         _TaskSwap(_RunnableFalse, deadline);
     }
     
-    // TODO: revisit -- this implementation is wrong because `T_Sleep()` will return upon any interrupt, not just our tick interrupt, so a tick won't necessarily have passed
-//    // Delay(ticks): delay current task for `ticks`, without allowing other tasks to run
-//    static void Delay(Ticks ticks) {
-//        _ISR.Delay = true;
-//        for (Ticks i=0;; i++) {
-//            T_Sleep();
-//            // Check break condition here so that:
-//            //   1. we sleep ticks+1 times, and
-//            //   2. ticks == ~0 works properly
-//            if (i == ticks) break;
-//        }
-//        _ISR.Delay = false;
-//    }
-    
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
-//        // Don't increment time if there's an existing _ISR.Wake signal that hasn't been consumed.
-//        // This is necessary so that we don't miss any ticks, which could cause a task wakeup to be missed.
-//        if (_ISR.Wake) return true;
-        
         _ISR.CurrentTime++;
         
         // Short-circuit if possible
@@ -402,21 +322,6 @@ public:
         _ISR.WakeDeadline = wakeDeadline;
         _ISR.WakeDeadlineUpdate = false;
         return true;
-        
-//        _ISR.WakeDeadline = std::nullopt;
-//        for (_Task& task : _Tasks) {
-//            if (task.wakeDeadline == wakeDeadline) {
-//                task.runnable = _RunnableTrue;
-//                task.wakeDeadline = std::nullopt;
-//            }
-//        }
-//        
-//        if (_ISR.CurrentTime == _ISR.WakeDeadline) {
-//            _ISR.Wake = true;
-//            return true;
-//        }
-//        
-//        return false;
     }
     
     static Ticks CurrentTime() {
@@ -445,46 +350,6 @@ private:
             }
         }
     }
-    
-//    static void _TaskStartWork() {
-//        _DidWork = true;
-//    }
-    
-//    static void _TaskRun() {
-//        // Enable ints when initially entering a task.
-//        // We're not using an IntState here because this function never actually returns (since
-//        // we call _TaskSwap() at the end to return to the scheduler) and therefore we don't
-//        // need IntState's dtor cleanup behavior.
-//        IntState::Set(true);
-//        // Future invocations should invoke _TaskSwap
-//        _CurrentTask->cont = _TaskSwap;
-//        // Signal that we did work
-//        _TaskStartWork();
-//        // Invoke task function
-//        _CurrentTask->run();
-//        // The task finished
-//        // Future invocations should do nothing
-//        _CurrentTask->cont = _TaskNop;
-//        // Return to scheduler
-//        _TaskSwap();
-//    }
-    
-//    // _TaskStackInit(): init the task's stack
-//    // Ints must be disabled
-//    static void _TaskStackInit(_Task& task) {
-//        const size_t extra = (_SchedulerStackSaveRegCount+1) % _SchedulerStackAlign;
-//        void**& sp = *((void***)&task.sp);
-//        // Reset stack pointer
-//        sp = (void**)task.spInit;
-//        // Push extra slots to ensure `_SchedulerStackAlign` alignment
-//        sp -= extra;
-//        // Push initial return address == task.run address == Task::Run
-//        sp--;
-//        *sp = (void*)_TaskRun;
-//        // Push registers that __TaskSwap() expects to be saved on the stack.
-//        // We don't care about what values the registers contain since they're not actually used.
-//        sp -= _SchedulerStackSaveRegCount;
-//    }
     
     static void _TaskRun() {
         // Enable interrupts before entering the task for the first time
@@ -539,33 +404,6 @@ private:
         return us / T_UsPerTick;
     }
     
-//    // _ProposeWakeDeadline(): update _ISR.WakeDeadline with a new deadline,
-//    // if it occurs before the existing deadline.
-//    // Ints must be disabled
-//    static void _ProposeWakeDeadline(Deadline deadline) {
-//        const Ticks wakeDelay = deadline-_ISR.CurrentTime;
-//        const Ticks currentWakeDelay = _ISR.WakeDeadline-_ISR.CurrentTime;
-//        if (!currentWakeDelay || wakeDelay<currentWakeDelay) {
-//            _ISR.WakeDeadline = deadline;
-//        }
-//    }
-    
-//    // _WaitUntil(): wait for a condition to become true, or for a deadline to pass.
-//    // Ints must be disabled
-//    static bool _WaitUntil(Deadline deadline, _RunnableFn fn) {
-//        do {
-//            // Update _ISR.WakeDeadline
-//            _ProposeWakeDeadline(deadline);
-//            
-//            // Next task
-//            _TaskSwap();
-//        } while (_ISR.CurrentTime != deadline);
-//        
-//        // Timeout
-////        _TaskStartWork();
-//        return std::optional<std::invoke_result_t<T_Fn>>{};
-//    }
-    
     // _TaskGet(): returns the _Task& for the given T_Task
     template <typename T_Task>
     static constexpr _Task& _TaskGet() {
@@ -610,11 +448,6 @@ public:
     // `static inline`, but C++ doesn't allow constexpr reinterpret_cast.
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
-    
-//    static inline bool _DidWork = false;
-//    static inline size_t _TaskCurrIdx = 0;
-//    static inline size_t _TaskNextIdx = 0;
-    
     static inline _Task* _TaskCurr = nullptr;
     static inline _Task* _TaskNext = nullptr;
     
