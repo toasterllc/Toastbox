@@ -274,7 +274,6 @@ private:
     using _StackGuard = uintptr_t[T_StackGuardCount];
     static constexpr Ticks _TicksMax = std::numeric_limits<Ticks>::max();
     static constexpr uintptr_t _StackGuardMagicNumber = (uintptr_t)0xCAFEBABEBABECAFE;
-    static constexpr size_t _TaskCount = sizeof...(T_Tasks);
     
     struct _Task {
         _TaskFn run = nullptr;
@@ -454,7 +453,7 @@ private:
     template <typename T_Task, size_t T_Delta=0>
     static constexpr _Task& _TaskGet() {
         static_assert((std::is_same_v<T_Task, T_Tasks> || ...), "invalid task");
-        constexpr size_t idx = (_ElmIdx<T_Task, T_Tasks...>() + T_Delta) % _TaskCount;
+        constexpr size_t idx = (_ElmIdx<T_Task, T_Tasks...>() + T_Delta) % std::size(_Tasks);
         return _Tasks[idx];
     }
     
@@ -463,7 +462,7 @@ private:
         return std::is_same_v<T_1,T_2> ? 0 : 1 + _ElmIdx<T_1, T_s...>();
     }
     
-    static inline _Task _Tasks[_TaskCount] = {
+    static inline _Task _Tasks[sizeof...(T_Tasks)] = {
         _Task{
             .run        = nullptr,
             .runnable   = _RunnableFalse,
