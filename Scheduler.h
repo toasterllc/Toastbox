@@ -226,9 +226,9 @@ public:
         _TaskSwap(fn);
     }
     
-    // WaitDelay(): sleep current task until `fn` returns true, or `ticks` to pass.
+    // Wait(): sleep current task until `fn` returns true, or `ticks` to pass.
     // See Wait() function above for more info.
-    static bool WaitDelay(Ticks ticks, _RunnableFn fn) {
+    static bool Wait(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
         const Deadline deadline = _ISR.CurrentTime+ticks;
         _TaskSwap(fn, deadline);
@@ -270,8 +270,8 @@ public:
         //
         // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
         // can employ the above heuristic to determine whether `deadline` has already passed.
-        const bool deadlinePassed = _ISR.CurrentTime-deadline <= _TicksMax/2;
-        if (deadlinePassed) return false;
+        const bool past = deadline-_ISR.CurrentTime > _TicksMax/2;
+        if (past) return false;
         _TaskSwap(fn, deadline);
         return (bool)_TaskCurr->wakeDeadline;
     }
@@ -300,7 +300,7 @@ public:
         // wakeDeadline to CurrentTime+ticks (not CurrentTime+ticks+1), and
         // our logic here matches that math to ensure that we sleep at
         // least `ticks`.
-        if (_ISR.WakeDeadlineUpdate || _ISR.WakeDeadline && *_ISR.WakeDeadline==_ISR.CurrentTime) {
+        if (_ISR.WakeDeadlineUpdate || (_ISR.WakeDeadline && *_ISR.WakeDeadline==_ISR.CurrentTime)) {
             // Wake the necessary tasks, and update _ISR.WakeDeadline
             Ticks wakeDelay = _TicksMax;
             std::optional<Deadline> wakeDeadline;
