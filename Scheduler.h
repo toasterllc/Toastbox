@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
+#include <array>
 
 namespace Toastbox {
 
@@ -464,14 +465,24 @@ private:
 public:
     static constexpr size_t _TaskCount = sizeof...(T_Tasks);
     
-    static inline _Task _Tasks[_TaskCount] = {_Task{
-        .run        = nullptr,
-        .runnable   = _RunnableFalse,
-        .sp         = nullptr,
-        .stackGuard = *(_StackGuard*)T_Tasks::Stack,
-        .next       = _Tasks,
-//        .next       = (T_Idx==_TaskCount-1 ? &_Tasks[0] : &_Tasks[T_Idx+1]),
-    }...};
+    template <size_t... T_Idx>
+    static constexpr std::array<_Task,_TaskCount> _TasksGet(std::integer_sequence<size_t, T_Idx...>) {
+        return {
+            _Task{
+                .run        = nullptr,
+                .runnable   = _RunnableFalse,
+                .sp         = nullptr,
+                .stackGuard = *(_StackGuard*)T_Tasks::Stack,
+                .next       = (T_Idx==_TaskCount-1 ? &_Tasks[0] : &_Tasks[T_Idx+1]),
+            }...,
+        };
+    }
+    
+    static constexpr std::array<_Task,_TaskCount> _TasksGet() {
+        return _TasksGet(std::make_integer_sequence<size_t, _TaskCount>{});
+    }
+    
+    static inline std::array<_Task,_TaskCount> _Tasks = _TasksGet();
     
     static constexpr bool _StackGuardEnabled = (bool)T_StackGuardCount;
     static constexpr bool _InterruptStackGuardEnabled =
