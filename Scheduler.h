@@ -151,30 +151,6 @@ public:
         #undef spRestore
     }
     
-    static void _TaskStart(_Task& task, _TaskFn run, void* sp) {
-        constexpr size_t SaveRegCount = _SchedulerStackSaveRegCount+1;
-        constexpr size_t ExtraRegCount = SaveRegCount % _SchedulerStackAlign;
-        constexpr size_t TotalRegCount = SaveRegCount + ExtraRegCount;
-        void**const stackEnd = (void**)sp;
-        // Set task run function
-        task.run = run;
-        // Make task runnable
-        task.runnable = _RunnableTrue;
-        // Reset wake deadline
-        task.wakeDeadline = std::nullopt;
-        // Reset stack pointer
-        task.sp = stackEnd - TotalRegCount;
-        // Push initial return address == _TaskRun
-        *(stackEnd-ExtraRegCount-1) = (void*)_TaskRun;
-    }
-    
-    static void _TaskStop(_Task& task) {
-        // Make task !runnable
-        task.runnable = _RunnableFalse;
-        // Reset wake deadline
-        task.wakeDeadline = std::nullopt;
-    }
-    
     // Start(): init the task's stack
     // Ints must be disabled
     template <typename T_Task>
@@ -394,6 +370,32 @@ private:
         }
     }
     
+    [[gnu::noinline]]
+    static void _TaskStart(_Task& task, _TaskFn run, void* sp) {
+        constexpr size_t SaveRegCount = _SchedulerStackSaveRegCount+1;
+        constexpr size_t ExtraRegCount = SaveRegCount % _SchedulerStackAlign;
+        constexpr size_t TotalRegCount = SaveRegCount + ExtraRegCount;
+        void**const stackEnd = (void**)sp;
+        // Set task run function
+        task.run = run;
+        // Make task runnable
+        task.runnable = _RunnableTrue;
+        // Reset wake deadline
+        task.wakeDeadline = std::nullopt;
+        // Reset stack pointer
+        task.sp = stackEnd - TotalRegCount;
+        // Push initial return address == _TaskRun
+        *(stackEnd-ExtraRegCount-1) = (void*)_TaskRun;
+    }
+    
+    [[gnu::noinline]]
+    static void _TaskStop(_Task& task) {
+        // Make task !runnable
+        task.runnable = _RunnableFalse;
+        // Reset wake deadline
+        task.wakeDeadline = std::nullopt;
+    }
+    
     static void _TaskRun() {
         // Enable interrupts before entering the task for the first time
         IntState::Set(true);
@@ -413,6 +415,7 @@ private:
     
     // _TaskSwap(): saves _TaskCurr and restores _TaskNext
     // Ints must be disabled
+    [[gnu::noinline]]
     static void _TaskSwap(_RunnableFn fn, std::optional<Deadline> wake=std::nullopt) {
         // Check stack guards
         if constexpr (_StackGuardEnabled) _StackGuardCheck(_TaskCurr->stackGuard);
