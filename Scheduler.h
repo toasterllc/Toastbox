@@ -239,9 +239,9 @@ public:
     // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
     //
     // For a deadline to be considered in the past, it must be in the range:
-    //   [CurrentTime - TicksMax/2, CurrentTime]
+    //   [CurrentTime-TicksMax/2-1, CurrentTime-1]
     // For a deadline to be considered in the future, it must be in the range:
-    //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
+    //   [CurrentTime, CurrentTime+TicksMax/2]
     //
     // where TicksMax is the maximum value that the `Ticks` type can hold.
     //
@@ -264,14 +264,14 @@ public:
         // 255 ticks in the future.)
         //
         // To solve this ambiguity, we require deadlines to be within
-        // [-TicksMax/2, +TicksMax/2+1] of _ISR.CurrentTime (where TicksMax is the maximum
+        // [-TicksMax/2-1, +TicksMax/2] of _ISR.CurrentTime (where TicksMax is the maximum
         // value that the `Ticks` type can hold), which allows us to employ the following
         // heuristic:
         //
         // For a deadline to be considered in the past, it must be in the range:
-        //   [CurrentTime - TicksMax/2, CurrentTime]
+        //   [CurrentTime-TicksMax/2-1, CurrentTime-1]
         // For a deadline to be considered in the future, it must be in the range:
-        //   [CurrentTime+1, CurrentTime + TicksMax/2 + 1]
+        //   [CurrentTime, CurrentTime+TicksMax/2]
         //
         // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
         // can employ the above heuristic to determine whether `deadline` has already passed.
