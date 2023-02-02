@@ -206,7 +206,6 @@ public:
     // Yield(): yield current task to the scheduler
     static void Yield() {
         IntState ints(false);
-        // Return to scheduler
         _TaskSwap(_RunnableTrue);
     }
     
@@ -231,7 +230,7 @@ public:
     // See Wait() function above for more info.
     static bool WaitDelay(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
-        const Deadline deadline = _ISR.CurrentTime+ticks+1;
+        const Deadline deadline = _ISR.CurrentTime+ticks;
         _TaskSwap(fn, deadline);
         return (bool)_TaskCurr->wakeDeadline;
     }
@@ -249,10 +248,6 @@ public:
     //
     // See Wait() function above for more info.
     static bool WaitDeadline(Deadline deadline, _RunnableFn fn) {
-        // IntState:
-        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
-        //   - ints must be disabled because _WaitUntil() requires it
-        //   - int state must be restored upon return because scheduler clobbers it
         IntState ints(false);
         
         // Test whether `deadline` has already passed.
@@ -287,13 +282,24 @@ public:
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
         IntState ints(false);
-        const Deadline deadline = _ISR.CurrentTime+ticks+1;
+        const Deadline deadline = _ISR.CurrentTime+ticks;
         _TaskSwap(_RunnableFalse, deadline);
     }
     
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
+        // Wake tasks matching the current tick.
+        // We wake tasks for deadline `N` only when updating CurrentTime to
+        // `N+1`, as this signifies that the full tick for `N` has elapsed.
+        //
+        // Put another way, we increment CurrentTime _after_ checking for
+        // tasks matching `CurrentTime`.
+        //
+        // Put another-another way, Sleep() assigns the tasks'
+        // wakeDeadline to CurrentTime+ticks (not CurrentTime+ticks+1), and
+        // our logic here matches that math to ensure that we sleep at
+        // least `ticks`.
         if (_ISR.WakeDeadlineUpdate || _ISR.WakeDeadline && *_ISR.WakeDeadline==_ISR.CurrentTime) {
             // Wake the necessary tasks, and update _ISR.WakeDeadline
             Ticks wakeDelay = _TicksMax;
@@ -324,8 +330,6 @@ public:
     }
     
     static Ticks CurrentTime() {
-        // IntState:
-        //   - ints must be disabled to prevent racing against Tick() ISR in accessing _ISR.CurrentTime
         IntState ints(false);
         return _ISR.CurrentTime;
     }
