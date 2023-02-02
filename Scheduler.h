@@ -170,6 +170,8 @@ public:
         constexpr void** StackEnd = (void**)(T_Task::Stack + sizeof(T_Task::Stack));
         constexpr _Task& task = _TaskGet<T_Task>();
         
+        // Set task run function
+        task.run = fn;
         // Reset stack pointer
         task.sp = StackEnd - TotalRegCount;
         // Make task runnable
@@ -184,15 +186,18 @@ public:
     template <typename T_Task>
     static void Stop() {
         constexpr _Task& task = _TaskGet<T_Task>();
+        // Make task !runnable
         task.runnable = _RunnableFalse;
+        // Reset wake deadline
+        task.wakeDeadline = std::nullopt;
     }
     
-    // Running<task>(): returns whether `task` is running
-    template <typename T_Task>
-    static bool Running() {
-        constexpr _Task& task = _TaskGet<T_Task>();
-        return task.runnable != _RunnableFalse;
-    }
+//    // Running<task>(): returns whether `task` is running
+//    template <typename T_Task>
+//    static bool Running() {
+//        constexpr _Task& task = _TaskGet<T_Task>();
+//        return task.runnable != _RunnableFalse;
+//    }
     
     // Run(): run the tasks indefinitely
     [[noreturn]]
@@ -332,11 +337,11 @@ public:
         return (bool)_TaskCurr->wakeDeadline;
     }
     
-    // Wait<tasks>(): sleep current task until `tasks` all stop running
-    template <typename... T_Tsks>
-    static void Wait() {
-        Wait([] { return (!Running<T_Tsks>() && ...); });
-    }
+//    // Wait<tasks>(): sleep current task until `tasks` all stop running
+//    template <typename... T_Tsks>
+//    static void Wait() {
+//        Wait([] { return (!Running<T_Tsks>() && ...); });
+//    }
     
     static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
     static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
@@ -398,12 +403,6 @@ public:
         _ISR.WakeDeadlineUpdate = false;
         return true;
         
-        
-//        
-//        
-//        UpdateState
-//        
-//        
 //        _ISR.WakeDeadline = std::nullopt;
 //        for (_Task& task : _Tasks) {
 //            if (task.wakeDeadline == wakeDeadline) {
@@ -416,8 +415,8 @@ public:
 //            _ISR.Wake = true;
 //            return true;
 //        }
-        
-        return false;
+//        
+//        return false;
     }
     
     static Ticks CurrentTime() {
