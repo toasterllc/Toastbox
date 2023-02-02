@@ -151,49 +151,76 @@ public:
         #undef spRestore
     }
     
-    // Start(): init the task's stack
-    // Ints must be disabled
-    template <typename T_Task>
-    static void Start(_TaskFn fn) {
+    static void _TaskStart(_Task& task, _TaskFn run, void* sp) {
         constexpr size_t SaveRegCount = _SchedulerStackSaveRegCount+1;
         constexpr size_t ExtraRegCount = SaveRegCount % _SchedulerStackAlign;
         constexpr size_t TotalRegCount = SaveRegCount + ExtraRegCount;
-        constexpr _Task& task = _TaskGet<T_Task>();
-        void**const StackEnd = (void**)(T_Task::Stack + sizeof(T_Task::Stack));
+        void**const stackEnd = (void**)sp;
         // Set task run function
-        task.run = fn;
+        task.run = run;
         // Make task runnable
         task.runnable = _RunnableTrue;
         // Reset wake deadline
         task.wakeDeadline = std::nullopt;
         // Reset stack pointer
-        task.sp = StackEnd - TotalRegCount;
+        task.sp = stackEnd - TotalRegCount;
         // Push initial return address == _TaskRun
-        *(StackEnd-ExtraRegCount-1) = (void*)_TaskRun;
+        *(stackEnd-ExtraRegCount-1) = (void*)_TaskRun;
     }
     
-    // Stop<task>(): stops `task`
-    template <typename T_Task>
-    static void Stop() {
-        constexpr _Task& task = _TaskGet<T_Task>();
+    static void _TaskStop(_Task& task) {
         // Make task !runnable
         task.runnable = _RunnableFalse;
         // Reset wake deadline
         task.wakeDeadline = std::nullopt;
     }
     
-    // Running<task>(): returns whether `task` is running
+    // Start(): init the task's stack
+    // Ints must be disabled
+    template <typename T_Task>
+    static void Start(_TaskFn run=T_Task::Run) {
+        constexpr _Task& task = _TaskGet<T_Task>();
+        void*const StackEnd = (void*)((uint8_t*)T_Task::Stack + sizeof(T_Task::Stack));
+        _TaskStart(task, run, StackEnd);
+    }
+    
+    // Stop<task>(): stops `task`
+    template <typename T_Task>
+    static void Stop() {
+        constexpr _Task& task = _TaskGet<T_Task>();
+        _TaskStop(task);
+    }
+    
+    // Running<T_Task>(): returns whether `task` is running
     template <typename T_Task>
     static bool Running() {
         constexpr _Task& task = _TaskGet<T_Task>();
         return task.runnable!=_RunnableFalse || task.wakeDeadline;
     }
     
-    // Wait<tasks>(): sleep current task until `tasks` all stop running
-    template <typename... T_Tsks>
-    static void Wait() {
-        Wait([] { return (!Running<T_Tsks>() && ...); });
+    // Start<Tasks>(): starts `Tasks`
+    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+    static void Start() {
+        Start<T_Task>(), Start<T_Task2>(), (Start<T_Tsks>(), ...);
     }
+    
+    // Stop<Tasks>(): stops `Tasks`
+    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+    static void Stop() {
+        Stop<T_Task>(), Stop<T_Task2>(), (Stop<T_Tsks>(), ...);
+    }
+    
+    // Running<Tasks>(): returns whether any of `Tasks` are running
+    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+    static void Running() {
+        return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
+    }
+    
+//    // RunningAll<Tasks>(): returns whether all of `Tasks` are running
+//    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+//    static void RunningAll() {
+//        return Running<T_Task>() && Running<T_Task2>() && (Running<T_Tsks>() && ...);
+//    }
     
     // Run(): run the tasks indefinitely
     [[noreturn]]
