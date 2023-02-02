@@ -118,7 +118,6 @@ public:
     
     // Run<Tasks>(): run the scheduler indefinitely
     // Automatically starts `Tasks`
-    template <typename... T_Tsks>
     [[noreturn]]
     static void Run() {
         // Initialize each task's stack guard
@@ -130,9 +129,6 @@ public:
         
         // Initialize the interrupt stack guard
         if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
-        
-        // Start the given tasks
-        Start<T_Tsks...>();
         
         // junk: dummy task that _TaskSwap saves the current stack pointer to,
         // which is thrown away.
