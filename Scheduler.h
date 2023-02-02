@@ -116,9 +116,14 @@ public:
         return Wait([] { return !Running<T_Tsks...>(); });
     }
     
-    // Run(): run the tasks indefinitely
+    // Run<Tasks>(): run the scheduler indefinitely
+    // Automatically starts `Tasks`
+    template <typename... T_Tsks>
     [[noreturn]]
     static void Run() {
+        // Start the given tasks
+        Start<T_Tsks...>();
+        
         // Initialize each task's stack guard
         if constexpr (_StackGuardEnabled) {
             for (_Task& task : _Tasks) {
