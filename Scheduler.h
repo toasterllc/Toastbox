@@ -294,33 +294,32 @@ public:
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
-        _ISR.CurrentTime++;
-        
-        // Short-circuit if possible
-        if (!_ISR.WakeDeadlineUpdate && (!_ISR.WakeDeadline || *_ISR.WakeDeadline!=_ISR.CurrentTime)) return false;
-        
-        // Wake the necessary tasks, and update _ISR.WakeDeadline
-        Ticks wakeDelay = _TicksMax;
-        std::optional<Deadline> wakeDeadline;
-        for (_Task& task : _Tasks) {
-            if (!task.wakeDeadline) continue;
-            if (*task.wakeDeadline == _ISR.CurrentTime) {
-                // The task's deadline has been hit; wake it
-                task.runnable = _RunnableTrue;
-                task.wakeDeadline = std::nullopt;
-            
-            } else {
-                // The task's deadline has not been hit; consider it as a candidate for the next _ISR.WakeDeadline
-                const Ticks d = *task.wakeDeadline-_ISR.CurrentTime;
-                if (d <= wakeDelay) {
-                    wakeDelay = d;
-                    wakeDeadline = task.wakeDeadline;
+        if (_ISR.WakeDeadlineUpdate || _ISR.WakeDeadline && *_ISR.WakeDeadline==_ISR.CurrentTime) {
+            // Wake the necessary tasks, and update _ISR.WakeDeadline
+            Ticks wakeDelay = _TicksMax;
+            std::optional<Deadline> wakeDeadline;
+            for (_Task& task : _Tasks) {
+                if (!task.wakeDeadline) continue;
+                if (*task.wakeDeadline == _ISR.CurrentTime) {
+                    // The task's deadline has been hit; wake it
+                    task.runnable = _RunnableTrue;
+                    task.wakeDeadline = std::nullopt;
+                
+                } else {
+                    // The task's deadline has not been hit; consider it as a candidate for the next _ISR.WakeDeadline
+                    const Ticks d = *task.wakeDeadline-_ISR.CurrentTime;
+                    if (d <= wakeDelay) {
+                        wakeDelay = d;
+                        wakeDeadline = task.wakeDeadline;
+                    }
                 }
             }
+            
+            _ISR.WakeDeadline = wakeDeadline;
+            _ISR.WakeDeadlineUpdate = false;
         }
         
-        _ISR.WakeDeadline = wakeDeadline;
-        _ISR.WakeDeadlineUpdate = false;
+        _ISR.CurrentTime++;
         return true;
     }
     
