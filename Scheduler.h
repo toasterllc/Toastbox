@@ -115,7 +115,7 @@ public:
         return Wait([] { return !Running<T_Tsks...>(); });
     }
     
-    // Run<Tasks>(): run the scheduler indefinitely
+    // Run(): run the scheduler indefinitely
     // Automatically starts `Tasks`
     [[noreturn]]
     static void Run() {
