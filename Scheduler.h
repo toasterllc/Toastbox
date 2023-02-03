@@ -178,6 +178,14 @@ public:
     template <typename T>
     static void Ctx(const T& t) { _TaskCurr->ctx = _PtrFromT(t); }
     
+//    // Context getter for current task
+//    template <typename T>
+//    static T& CtxGet(const T& t) { return *_TFromPtr<T*>(_TaskCurr->ctx); }
+//    
+//    // Context setter for current task
+//    template <typename T>
+//    static void CtxSet(const T& t) { _TaskCurr->ctx = _PtrFromT(&t); }
+    
     // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
     //
     // For a deadline to be considered in the past, it must be in the range:
