@@ -349,12 +349,11 @@ private:
 #elif defined(SchedulerARM32)
         // Architecture = ARM32
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that we save below
+        #define _SchedulerStackSaveRegCount     8   // Count of pointer-sized registers that we save below
         asm volatile("push {r4-r11,lr}" : : : );                            // (1)
         asm volatile("str sp, %0" : "=m" (_TaskPrev->sp) : : );             // (2)
         asm volatile("ldr sp, %0" : : "m" (_TaskCurr->sp) : );              // (3)
-        asm volatile("pop {r4-r11,lr}" : : : );                             // (4)
-        asm volatile("bx lr" : : : );                                       // (5)
+        asm volatile("pop {r4-r11,pc}" : : : );                             // (4)
 #elif defined(SchedulerAMD64)
         // Architecture = AMD64
         #define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
