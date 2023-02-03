@@ -64,6 +64,7 @@ class Scheduler {
 private:
     using _TaskFn = void(*)();
     using _RunnableFn = bool(*)();
+    using _RunnableArgFn = bool(*)(void* fn, uintptr_t arg);
     
 public:
     using Ticks     = unsigned int;
@@ -144,6 +145,20 @@ public:
         _TaskSwap(_RunnableTrue);
     }
     
+    template <typename T>
+    static T _ArgFromPtr(uintptr_t x) {
+        static_assert(sizeof(T) <= sizeof(uintptr_t));
+        union { T arg; uintptr_t ptr; } u = { .ptr = x };
+        return u.arg;
+    }
+
+    template <typename T>
+    static uintptr_t _PtrFromArg(T x) {
+        static_assert(sizeof(T) <= sizeof(uintptr_t));
+        union { T arg; uintptr_t ptr; } u = { .arg = x };
+        return u.ptr;
+    }
+    
     // Wait(fn): sleep current task until `fn` returns true.
     // `fn` must not cause any task to become runnable.
     // If it does, the scheduler may not notice that the task is runnable and
@@ -158,15 +173,34 @@ public:
     static void Wait(_RunnableFn fn) {
         IntState ints(false);
         if (fn()) return;
-        _TaskSwap(fn);
+        _TaskSwap((_RunnableArgFn)fn);
+    }
+    
+    template <typename T_Arg, typename T_Fn>
+    static void Wait(const T_Arg& arg, T_Fn&& fn) {
+        IntState ints(false);
+        if (fn(arg)) return;
+        _TaskSwap(std::forward<T_Fn>(fn), arg);
     }
     
     // Wait(): sleep current task until `fn` returns true, or `ticks` to pass.
     // See Wait() function above for more info.
-    static bool Wait(Ticks ticks, _RunnableFn fn) {
+    static bool WaitDelay(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
+        if (fn()) return true;
         const Deadline deadline = _ISR.CurrentTime+ticks;
-        _TaskSwap(fn, deadline);
+        _TaskSwap((_RunnableArgFn)fn, deadline);
+        return (bool)_TaskCurr->wakeDeadline;
+    }
+    
+    // Wait(): sleep current task until `fn` returns true, or `ticks` to pass.
+    // See Wait() function above for more info.
+    template <typename T_Arg, typename T_Fn>
+    static bool WaitDelay(Ticks ticks, const T_Arg& arg, T_Fn&& fn) {
+        IntState ints(false);
+        if (fn(arg)) return true;
+        const Deadline deadline = _ISR.CurrentTime+ticks;
+        _TaskSwap(std::forward<T_Fn>(fn), arg, deadline);
         return (bool)_TaskCurr->wakeDeadline;
     }
     
@@ -207,7 +241,18 @@ public:
         // can employ the above heuristic to determine whether `deadline` has already passed.
         const bool past = deadline-_ISR.CurrentTime > _TicksMax/2;
         if (past) return false;
-        _TaskSwap(fn, deadline);
+        if (fn()) return true;
+        _TaskSwap((_RunnableArgFn)fn, deadline);
+        return (bool)_TaskCurr->wakeDeadline;
+    }
+    
+    template <typename T_Arg, typename T_Fn>
+    static bool WaitDeadline(Deadline deadline, const T_Arg& arg, T_Fn&& fn) {
+        IntState ints(false);
+        const bool past = deadline-_ISR.CurrentTime > _TicksMax/2;
+        if (past) return false;
+        if (fn()) return true;
+        _TaskSwap(std::forward<T_Fn>(fn), arg, deadline);
         return (bool)_TaskCurr->wakeDeadline;
     }
     
@@ -278,7 +323,9 @@ private:
     
     struct _Task {
         _TaskFn run = nullptr;
-        _RunnableFn runnable = nullptr;
+        _RunnableArgFn runnable = nullptr;
+        void* runnableFn = nullptr;
+        uintptr_t runnableArg = 0;
         std::optional<Deadline> wakeDeadline;
         void* sp = nullptr;
         _StackGuard& stackGuard;
@@ -407,16 +454,24 @@ private:
     
     static _Task* _TaskNextRunnable(_Task* x) {
         for (_Task* i=x->next;; i=i->next) {
-            if (i->runnable()) return i;
+            if (i->runnable(i->runnableFn, i->runnableArg)) return i;
             if (i == x) break;
         }
         return nullptr;
     }
     
+    template <typename T_Fn, typename T_Arg>
+    static void _TaskSwap(T_Fn&& fn, const T_Arg& arg, std::optional<Deadline> wake=std::nullopt) {
+        using Fn = bool(*)(T_Arg);
+        _TaskCurr->runnableFn = (void*)+fn;
+        _TaskCurr->runnableArg = _PtrFromArg(arg);
+        _TaskSwap([] (void* fn, uintptr_t arg) { return ((Fn)fn)(_ArgFromPtr<T_Arg>(arg)); });
+    }
+    
     // _TaskSwap(): saves _TaskCurr and restores _TaskNext
     // Ints must be disabled
     [[gnu::noinline]]
-    static void _TaskSwap(_RunnableFn fn, std::optional<Deadline> wake=std::nullopt) {
+    static void _TaskSwap(_RunnableArgFn fn, std::optional<Deadline> wake=std::nullopt) {
         // Check stack guards
         if constexpr (_StackGuardEnabled) _StackGuardCheck(_TaskCurr->stackGuard);
         if constexpr (_InterruptStackGuardEnabled) _StackGuardCheck(_InterruptStackGuard);
@@ -435,11 +490,11 @@ private:
         __TaskSwap();
     }
     
-    static bool _RunnableTrue() {
+    static bool _RunnableTrue(void* fn, uintptr_t arg) {
         return true;
     }
     
-    static bool _RunnableFalse() {
+    static bool _RunnableFalse(void* fn, uintptr_t arg) {
         return false;
     }
     
