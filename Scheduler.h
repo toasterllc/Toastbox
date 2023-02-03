@@ -165,6 +165,7 @@ public:
     // See Wait() function above for more info.
     static bool Wait(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
+        if (fn()) return true;
         const Deadline deadline = _ISR.CurrentTime+ticks;
         _TaskSwap(fn, deadline);
         return (bool)_TaskCurr->wakeDeadline;
@@ -207,6 +208,7 @@ public:
         // can employ the above heuristic to determine whether `deadline` has already passed.
         const bool past = deadline-_ISR.CurrentTime > _TicksMax/2;
         if (past) return false;
+        if (fn()) return true;
         _TaskSwap(fn, deadline);
         return (bool)_TaskCurr->wakeDeadline;
     }
