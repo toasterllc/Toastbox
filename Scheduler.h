@@ -70,7 +70,6 @@ public:
     using Deadline  = Ticks;
     
     // Start(): init the task's stack
-    // Ints must be disabled
     template <typename T_Task>
     static void Start(_TaskFn run=T_Task::Run) {
         constexpr _Task& task = _TaskGet<T_Task>();
@@ -85,32 +84,32 @@ public:
         _TaskStop(task);
     }
     
-    // Running<T_Task>(): returns whether `task` is running
+    // Running<task>(): returns whether `task` is running
     template <typename T_Task>
     static bool Running() {
         constexpr _Task& task = _TaskGet<T_Task>();
         return task.runnable!=_RunnableFalse || task.wakeDeadline;
     }
     
-    // Start<Tasks>(): starts `Tasks`
+    // Start<tasks>(): starts `tasks`
     template <typename T_Task, typename T_Task2, typename... T_Tsks>
     static void Start() {
         Start<T_Task>(), Start<T_Task2>(), (Start<T_Tsks>(), ...);
     }
     
-    // Stop<Tasks>(): stops `Tasks`
+    // Stop<tasks>(): stops `tasks`
     template <typename T_Task, typename T_Task2, typename... T_Tsks>
     static void Stop() {
         Stop<T_Task>(), Stop<T_Task2>(), (Stop<T_Tsks>(), ...);
     }
     
-    // Running<Tasks>(): returns whether any of `Tasks` are running
+    // Running<tasks>(): returns whether any of `tasks` are running
     template <typename T_Task, typename T_Task2, typename... T_Tsks>
     static void Running() {
         return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
     }
     
-    // Running<Tasks>(): returns whether any of `Tasks` are running
+    // Wait<tasks>(): waits until none of `tasks` are running
     template <typename... T_Tsks>
     static void Wait() {
         return Wait([] { return !Running<T_Tsks...>(); });
@@ -123,7 +122,7 @@ public:
         // Initialize each task's stack guard
         if constexpr (_StackGuardEnabled) {
             for (_Task& task : _Tasks) {
-                _StackGuardInit(task.stackGuard);
+                _StackGuardInit(*task.stackGuard);
             }
         }
         
@@ -170,6 +169,14 @@ public:
         _TaskSwap(fn, deadline);
         return (bool)_TaskCurr->wakeDeadline;
     }
+    
+    // Context getter for current task
+    template <typename T>
+    static T Ctx() { return _TFromPtr<T>(_TaskCurr->ctx); }
+    
+    // Context setter for current task
+    template <typename T>
+    static void Ctx(const T& t) { _TaskCurr->ctx = _PtrFromT(t); }
     
     // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
     //
@@ -283,25 +290,35 @@ private:
         _RunnableFn runnable = nullptr;
         std::optional<Deadline> wakeDeadline;
         void* sp = nullptr;
-        _StackGuard& stackGuard;
+        uintptr_t ctx = 0;
+        _StackGuard* stackGuard = nullptr;
         _Task* next = nullptr;
     };
     
-    // __TaskSwap(): saves current stack pointer into spSave and restores the stack
-    // pointer to spRestore.
+    template <typename T>
+    static T _TFromPtr(uintptr_t x) {
+        static_assert(sizeof(T) <= sizeof(uintptr_t));
+        union { T t; uintptr_t ptr; } u = { .ptr = x };
+        return u.t;
+    }
+    
+    template <typename T>
+    static uintptr_t _PtrFromT(T x) {
+        static_assert(sizeof(T) <= sizeof(uintptr_t));
+        union { T t; uintptr_t ptr; } u = { .t = x };
+        return u.ptr;
+    }
+    
+    // __TaskSwap(): architecture-specific function that saves the stack pointer into
+    // _TaskPrev->sp and restores the stack pointer to _TaskCurr->sp. Steps:
+    //
+    //   (1) Push callee-saved regs onto stack (including $PC if needed for step #5 to work)
+    //   (2) Save stack pointer into `_TaskPrev->sp`
+    //   (3) Restore stack pointer from `_TaskCurr->sp`
+    //   (4) Pop callee-saved registers from stack
+    //   (5) Return to caller
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
     static void __TaskSwap() {
-        // __TaskSwap(): architecture-specific macro that swaps the current task
-        // with a different task. Steps:
-        //
-        // (1) Push callee-saved regs onto stack (including $PC if needed for step #4 to work)
-        // (2) Save $SP (stack pointer) into `spSave` (macro argument)
-        // (3) Restore $SP (stack pointer) from `spRestore` (macro argument)
-        // (4) Pop callee-saved registers from stack
-        // (5) Return to caller
-        #define spSave      _TaskNext->sp
-        #define spRestore   _TaskCurr->sp
-        
 #if defined(SchedulerMSP430)
         // Architecture = MSP430
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
@@ -309,15 +326,15 @@ private:
         if constexpr (sizeof(void*) == 2) {
             // Small memory model
             asm volatile("pushm #7, r10" : : : );                           // (1)
-            asm volatile("mov sp, %0" : "=m" (spSave) : : );                // (2)
-            asm volatile("mov %0, sp" : : "m" (spRestore) : );              // (3)
+            asm volatile("mov sp, %0" : "=m" (_TaskPrev->sp) : : );         // (2)
+            asm volatile("mov %0, sp" : : "m" (_TaskCurr->sp) : );          // (3)
             asm volatile("popm #7, r10" : : : );                            // (4)
             asm volatile("ret" : : : );                                     // (5)
         } else {
             // Large memory model
             asm volatile("pushm.a #7, r10" : : : );                         // (1)
-            asm volatile("mov.a sp, %0" : "=m" (spSave) : : );              // (2)
-            asm volatile("mov.a %0, sp" : : "m" (spRestore) : );            // (3)
+            asm volatile("mov.a sp, %0" : "=m" (_TaskPrev->sp) : : );       // (2)
+            asm volatile("mov.a %0, sp" : : "m" (_TaskCurr->sp) : );        // (3)
             asm volatile("popm.a #7, r10" : : : );                          // (4)
             asm volatile("ret.a" : : : );                                   // (5)
         }
@@ -326,8 +343,8 @@ private:
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
         #define _SchedulerStackSaveRegCount     9   // Count of pointer-sized registers that we save below
         asm volatile("push {r4-r11,lr}" : : : );                            // (1)
-        asm volatile("str sp, %0" : "=m" (spSave) : : );                    // (2)
-        asm volatile("ldr sp, %0" : : "m" (spRestore) : );                  // (3)
+        asm volatile("str sp, %0" : "=m" (_TaskPrev->sp) : : );             // (2)
+        asm volatile("ldr sp, %0" : : "m" (_TaskCurr->sp) : );              // (3)
         asm volatile("pop {r4-r11,lr}" : : : );                             // (4)
         asm volatile("bx lr" : : : );                                       // (5)
 #elif defined(SchedulerAMD64)
@@ -340,8 +357,8 @@ private:
         asm volatile("push %%r13" : : : );                                  // (1)
         asm volatile("push %%r14" : : : );                                  // (1)
         asm volatile("push %%r15" : : : );                                  // (1)
-        asm volatile("mov %%rsp, %0" : "=m" (spSave) : : );                 // (2)
-        asm volatile("mov %0, %%rsp" : : "m" (spRestore) : );               // (3)
+        asm volatile("mov %%rsp, %0" : "=m" (_TaskPrev->sp) : : );          // (2)
+        asm volatile("mov %0, %%rsp" : : "m" (_TaskCurr->sp) : );           // (3)
         asm volatile("pop %%r15" : : : );                                   // (4)
         asm volatile("pop %%r14" : : : );                                   // (4)
         asm volatile("pop %%r13" : : : );                                   // (4)
@@ -352,8 +369,6 @@ private:
 #else
         #error Task: Unspecified or unsupported architecture
 #endif
-        #undef spSave
-        #undef spRestore
     }
     
     // MARK: - Stack Guard
@@ -407,20 +422,21 @@ private:
         _TaskSwap(_RunnableFalse);
     }
     
-    static _Task* _TaskNextRunnable(_Task* x) {
-        for (_Task* i=x->next;; i=i->next) {
-            if (i->runnable()) return i;
-            if (i == x) break;
+    static bool _TaskNext() {
+        _TaskPrev = _TaskCurr;
+        for (;;) {
+            _TaskCurr = _TaskCurr->next;
+            if (_TaskCurr->runnable()) return true;
+            if (_TaskCurr == _TaskPrev) return false;
         }
-        return nullptr;
     }
     
-    // _TaskSwap(): saves _TaskCurr and restores _TaskNext
+    // _TaskSwap(): saves _TaskCurr and restores the next runnable task
     // Ints must be disabled
     [[gnu::noinline]]
     static void _TaskSwap(_RunnableFn fn, std::optional<Deadline> wake=std::nullopt) {
         // Check stack guards
-        if constexpr (_StackGuardEnabled) _StackGuardCheck(_TaskCurr->stackGuard);
+        if constexpr (_StackGuardEnabled) _StackGuardCheck(*_TaskCurr->stackGuard);
         if constexpr (_InterruptStackGuardEnabled) _StackGuardCheck(_InterruptStackGuard);
         
         // Update _TaskCurr's state
@@ -429,11 +445,7 @@ private:
         _ISR.WakeDeadlineUpdate = true;
         
         // Get the next runnable task, or sleep if no task wants to run
-        while (!(_TaskNext = _TaskNextRunnable(_TaskCurr))) {
-            T_Sleep();
-        }
-        
-        std::swap(_TaskCurr, _TaskNext);
+        while (!_TaskNext()) T_Sleep();
         __TaskSwap();
     }
     
@@ -470,7 +482,7 @@ private:
             .run        = nullptr,
             .runnable   = _RunnableFalse,
             .sp         = nullptr,
-            .stackGuard = *(_StackGuard*)T_Tasks::Stack,
+            .stackGuard = (_StackGuard*)T_Tasks::Stack,
             .next       = &_TaskGet<T_Tasks, 1>(),
         }...,
     };
@@ -484,8 +496,8 @@ private:
     // `static inline`, but C++ doesn't allow constexpr reinterpret_cast.
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
+    static inline _Task* _TaskPrev = nullptr;
     static inline _Task* _TaskCurr = nullptr;
-    static inline _Task* _TaskNext = nullptr;
     
     static inline struct {
         Ticks CurrentTime = 0;
