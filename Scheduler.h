@@ -321,8 +321,8 @@ private:
     // _TaskPrev->sp and restores the stack pointer to _TaskCurr->sp. Steps:
     //
     //   (1) Push callee-saved regs onto stack (including $PC if needed for step #5 to work)
-    //   (2) Save stack pointer into `_TaskPrev->sp`
-    //   (3) Restore stack pointer from `_TaskCurr->sp`
+    //   (2) Save $SP into `_TaskPrev->sp`
+    //   (3) Restore $SP from `_TaskCurr->sp`
     //   (4) Pop callee-saved registers from stack
     //   (5) Return to caller
     [[gnu::noinline, gnu::naked]] // Don't inline: PC must be pushed onto the stack when called
