@@ -452,7 +452,11 @@ private:
         _ISR.WakeDeadlineUpdate = true;
         
         // Get the next runnable task, or sleep if no task wants to run
-        while (!_TaskNext()) T_Sleep();
+        while (!_TaskNext()) {
+            T_Sleep();
+            // Let interrupts fire after waking
+            IntState ints(true);
+        }
         __TaskSwap();
     }
     
