@@ -5,6 +5,8 @@
 #include <optional>
 #include <array>
 
+extern "C" void Blink();
+
 namespace Toastbox {
 
 // MARK: - IntState
@@ -330,12 +332,13 @@ private:
 #if defined(SchedulerMSP430)
         // Architecture = MSP430
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that we save below
+        #define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that we save below (excluding $PC)
         if constexpr (sizeof(void*) == 2) {
             // Small memory model
             asm volatile("pushm #7, r10" : : : );                           // (1)
             asm volatile("mov sp, %0" : "=m" (_TaskPrev->sp) : : );         // (2)
-            asm volatile("mov %0, sp" : : "m" (_TaskCurr->sp) : );          // (3)
+            asm volatile("jmp Blink" : : : );
+            asm volatile("mov %0, sp" : : "m" (_TaskCurr->sp) : );          // (3)      // CRASHES HERE
             asm volatile("popm #7, r10" : : : );                            // (4)
             asm volatile("ret" : : : );                                     // (5)
         } else {
@@ -349,7 +352,7 @@ private:
 #elif defined(SchedulerARM32)
         // Architecture = ARM32
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     8   // Count of pointer-sized registers that we save below
+        #define _SchedulerStackSaveRegCount     8   // Count of pointer-sized registers that we save below (excluding $PC)
         asm volatile("push {r4-r11,lr}" : : : );                            // (1)
         asm volatile("str sp, %0" : "=m" (_TaskPrev->sp) : : );             // (2)
         asm volatile("ldr sp, %0" : : "m" (_TaskCurr->sp) : );              // (3)
@@ -357,7 +360,7 @@ private:
 #elif defined(SchedulerAMD64)
         // Architecture = AMD64
         #define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that we save below
+        #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that we save below (excluding $PC)
         asm volatile("push %%rbx" : : : );                                  // (1)
         asm volatile("push %%rbp" : : : );                                  // (1)
         asm volatile("push %%r12" : : : );                                  // (1)
@@ -449,7 +452,7 @@ private:
         // Update _TaskCurr's state
         _TaskCurr->runnable = fn;
         _TaskCurr->wakeDeadline = wake;
-        _ISR.WakeDeadlineUpdate = true;
+        if (wake) _ISR.WakeDeadlineUpdate = true;
         
         // Get the next runnable task, or sleep if no task wants to run
         while (!_TaskNext()) {
@@ -457,6 +460,7 @@ private:
             // Let interrupts fire after waking
             IntState ints(true);
         }
+        
         __TaskSwap();
     }
     
