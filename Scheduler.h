@@ -337,8 +337,8 @@ private:
             // Small memory model
             asm volatile("pushm #7, r10" : : : );                           // (1)
             asm volatile("mov sp, %0" : "=m" (_TaskPrev->sp) : : );         // (2)
-            asm volatile("jmp Blink" : : : );
             asm volatile("mov %0, sp" : : "m" (_TaskCurr->sp) : );          // (3)      // CRASHES HERE
+            asm volatile("jmp Blink" : : : );
             asm volatile("popm #7, r10" : : : );                            // (4)
             asm volatile("ret" : : : );                                     // (5)
         } else {
@@ -460,6 +460,22 @@ private:
             // Let interrupts fire after waking
             IntState ints(true);
         }
+        
+    // Task stack
+//    [[gnu::section(".stack._TaskMain")]]
+//    alignas(sizeof(void*))
+//    static inline uint8_t Stack[256];
+        
+//        0x232E = 0x222E + 0x100
+//        _TaskMain::Stack::End = 0x232E
+        
+//        if (((uintptr_t)_TaskCurr->sp) == 0x232E) {
+//            Blink();
+//        }
+        
+//        if (((uintptr_t)_TaskCurr->sp) == (0x232E - (8*2))) {
+//            Blink();
+//        }
         
         __TaskSwap();
     }
