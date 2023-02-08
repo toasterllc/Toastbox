@@ -238,6 +238,20 @@ public:
         _TaskSwap(_RunnableFalse, deadline);
     }
     
+    // Delay(ticks): delay current task for `ticks` without allowing other tasks to run
+    static void Delay(Ticks ticks) {
+        IntState ints(false);
+        const Deadline deadline = _ISR.CurrentTime+ticks;
+        _TaskCurr->wakeDeadline = deadline;
+        _ISR.WakeDeadlineUpdate = true;
+        
+        while (_TaskCurr->wakeDeadline) {
+            T_Sleep();
+            // Let interrupts fire after waking
+            IntState ints(true);
+        }
+    }
+    
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the scheduler needs to run
     static bool Tick() {
