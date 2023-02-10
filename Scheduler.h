@@ -516,7 +516,7 @@ private:
     static constexpr bool _StackGuardEnabled = (bool)T_StackGuardCount;
     static constexpr bool _InterruptStackGuardEnabled =
         _StackGuardEnabled &&
-        !std::is_null_pointer<decltype(T_StackInterrupt)>::value;
+        !std::is_null_pointer_v<decltype(T_StackInterrupt)>;
     
     // _InterruptStackGuard: ideally this would be `static constexpr` instead of
     // `static inline`, but C++ doesn't allow constexpr reinterpret_cast.
