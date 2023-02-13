@@ -105,7 +105,7 @@ public:
     
     // Running<tasks>(): returns whether any of `tasks` are running
     template <typename T_Task, typename T_Task2, typename... T_Tsks>
-    static void Running() {
+    static bool Running() {
         return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
     }
     
