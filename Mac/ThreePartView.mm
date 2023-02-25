@@ -109,9 +109,9 @@ static void _AuxViewInit(ThreePartView* self, AuxView& auxView, bool left) {
     // Resizer
     {
         constexpr CGFloat ResizerWidth = 20;
-        __weak auto weakSelf = self;
+        __weak auto selfWeak = self;
         auxView.resizerView = [[ResizerView alloc] initWithFrame:{}];
-        auxView.resizerView->handler = ^(NSEvent* event) { [weakSelf _auxView:auxView trackResize:event]; };
+        auxView.resizerView->handler = ^(NSEvent* event) { [selfWeak _auxView:auxView trackResize:event]; };
         auxView.resizerView->cursor = [NSCursor resizeLeftRightCursor];
         
         [self addSubview:auxView.resizerView];
