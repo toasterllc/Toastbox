@@ -7,6 +7,7 @@
 #include <string>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <unistd.h>
 #include "RuntimeError.h"
 #include "FileDescriptor.h"
@@ -15,44 +16,46 @@ namespace Toastbox {
 
 class Mmap {
 public:
-    Mmap() {}
-    
-    Mmap(const FileDescriptor& fd, size_t len=SIZE_MAX, int flags=MAP_PRIVATE) {
-        try {
-            _init(std::move(fd), len, flags);
-        
-        } catch (...) {
-            _reset();
-            throw;
-        }
+    static size_t PageSize() {
+        static const size_t X = getpagesize();
+        return X;
     }
     
-    Mmap(const std::filesystem::path& path, size_t len=SIZE_MAX, int flags=MAP_PRIVATE) {
-        try {
-            int fd = open(path.c_str(), O_RDWR);
-            if (fd < 0) throw RuntimeError("open failed: %s", strerror(errno));
-            _init(fd, len, flags);
-        
-        } catch (...) {
-            _reset();
-            throw;
-        }
+    static size_t PageFloor(size_t x) {
+        return (x/PageSize())*PageSize();
+    }
+    
+    static size_t PageCeil(size_t x) {
+        return PageFloor(x+PageSize()-1);
+    }
+    
+    Mmap() {}
+    
+    Mmap(FileDescriptor&& fd, std::optional<size_t> cap=std::nullopt, int flags=MAP_PRIVATE) {
+        _init(std::move(fd), cap, flags);
+    }
+    
+    Mmap(const std::filesystem::path& path, std::optional<size_t> cap=std::nullopt, int flags=MAP_PRIVATE) {
+        int fd = open(path.c_str(), O_RDWR);
+        if (fd < 0) throw RuntimeError("open failed: %s", strerror(errno));
+        _init(fd, cap, flags);
     }
     
     // Copy constructor: not allowed
     Mmap(const Mmap& x) = delete;
-    // Move constructor: use move assignment operator
-    Mmap(Mmap&& x) { *this = std::move(x); }
-    // Move assignment operator
-    Mmap& operator=(Mmap&& x) {
-        _reset();
-        _state = std::move(x._state);
-        x._state = {};
-        return *this;
-    }
+    // Move constructor: allowed
+    Mmap(Mmap&& x) { swap(x); }
+    // Move assignment operator: allowed
+    Mmap& operator=(Mmap&& x) { swap(x); return *this; }
     
     ~Mmap() {
-        _reset();
+        if (_state.data) {
+            munmap((void*)_state.data, _state.cap);
+        }
+    }
+    
+    void swap(Mmap& x) {
+        std::swap(_state, x._state);
     }
     
     void sync() const {
@@ -60,24 +63,6 @@ public:
         int ir = msync(_state.data, _state.len, MS_SYNC);
         if (ir) throw RuntimeError("msync failed: %s", strerror(errno));
     }
-    
-//    template <typename T=uint8_t>
-//    T* data(size_t off=0) { return (T*)_state.data; }
-    
-//    template <typename T=uint8_t>
-//    const T& data(size_t off=0) const {
-//        if (off>_state.len || (_state.len-off)<sizeof(T)) {
-//            const uintmax_t validStart = 0;
-//            const uintmax_t validEnd = _state.len-1;
-//            const uintmax_t accessStart = off;
-//            const uintmax_t accessEnd = off+sizeof(T)-1;
-//            throw RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
-//                validStart, validEnd,
-//                accessStart, accessEnd
-//            );
-//        }
-//        return *(const T*)(_state.data+off);
-//    }
     
     template <typename T=uint8_t>
     T* data(size_t off=0) {
@@ -99,45 +84,68 @@ public:
         return (const T*)(_state.data+off);
     }
     
-    template <typename T=uint8_t>
-    size_t len() const { return _state.len/sizeof(T); }
+    size_t len() const { return _state.len; }
     
-    size_t alignedLen() const { return _CeilToPageSize(_state.len); }
-    
-private:
-    
-    static size_t _CeilToPageSize(size_t x) {
-        static const size_t PageSize = getpagesize();
-        return ((x+PageSize-1)/PageSize)*PageSize;
+    // len(x): resize underlying file within the range of the original capacity
+    // If the file is expanded, the additional pages are mapped to the file.
+    void len(size_t l) {
+        assert(l <= _state.cap);
+        
+        const size_t lenPrev = _state.len;
+        _state.len = l;
+        
+        const int ir = ftruncate(_state.fd, _state.len);
+        if (ir) throw Toastbox::RuntimeError("ftruncate failed: %s", strerror(errno));
+        
+        // If the file was expanded, remap the affected pages to the file.
+        // (If the file was contracted, we don't need to do anything.)
+        if (_state.len > lenPrev) {
+            const size_t begin = PageFloor(lenPrev);
+            const size_t end   = PageCeil(_state.len);
+            void* data = mmap(_state.data+begin, end-begin, _MmapProtection, _state.flags|MAP_FIXED, _state.fd, begin);
+            if (data == MAP_FAILED) throw RuntimeError("mmap failed: %s", strerror(errno));
+        }
     }
     
-    void _init(const FileDescriptor& fd, size_t len, int flags) {
-        if (len == SIZE_MAX) {
-            struct stat st;
-            int ir = fstat(fd, &st);
-            if (ir) throw RuntimeError("fstat failed: %s", strerror(errno));
-            _state.len = st.st_size;
+    size_t cap() const { return _state.cap; }
+    
+private:
+    static constexpr int _MmapProtection = PROT_READ|PROT_WRITE;
+    
+    void _init(FileDescriptor&& fd, std::optional<size_t> cap, int flags) {
+        assert(!cap || *cap==PageCeil(*cap));
         
+        _state.fd = std::move(fd);
+        _state.flags = flags;
+        
+        // Determine file size
+        struct stat st;
+        int ir = fstat(_state.fd, &st);
+        if (ir) throw RuntimeError("fstat failed: %s", strerror(errno));
+        const size_t fileLen = st.st_size;
+        
+        // No capacity specified: len=file length, cap=ceiled file length
+        if (!cap) {
+            _state.len = fileLen;
+            _state.cap = PageCeil(fileLen);
+        
+        // Capacity specified: len=min(cap, fileLen), cap=cap
         } else {
-            _state.len = len;
+            _state.len = std::min(*cap, fileLen);
+            _state.cap = *cap;
         }
         
-        void* data = mmap(nullptr, alignedLen(), PROT_READ|PROT_WRITE, flags, fd, 0);
+        void* data = mmap(nullptr, _state.cap, _MmapProtection, _state.flags, _state.fd, 0);
         if (data == MAP_FAILED) throw RuntimeError("mmap failed: %s", strerror(errno));
         _state.data = (uint8_t*)data;
     }
     
-    void _reset() {
-        if (_state.data) {
-            munmap((void*)_state.data, _state.len);
-        }
-        
-        _state = {};
-    }
-    
     struct {
+        FileDescriptor fd;
+        int flags = 0;
         uint8_t* data = nullptr;
         size_t len = 0;
+        size_t cap = 0;
     } _state = {};
 };
 
