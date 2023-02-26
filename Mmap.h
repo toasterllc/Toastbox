@@ -90,6 +90,7 @@ public:
     // If the file is expanded, the additional pages are mapped to the file.
     void len(size_t l) {
         assert(l <= _state.cap);
+        if (l == _state.len) return; // Short-circuit if nothing changed
         
         const size_t lenPrev = _state.len;
         _state.len = l;
