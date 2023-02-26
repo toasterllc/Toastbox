@@ -64,24 +64,22 @@ public:
         if (ir) throw RuntimeError("msync failed: %s", strerror(errno));
     }
     
-    template <typename T=uint8_t>
-    T* data(size_t off=0) {
-        return const_cast<T*>(((const Mmap*)this)->data<T>(off));
+    uint8_t* data(size_t off=0, size_t len=0) {
+        return const_cast<uint8_t*>(((const Mmap*)this)->data(off, len));
     }
     
-    template <typename T=uint8_t>
-    const T* data(size_t off=0) const {
-        if (off>_state.len || (_state.len-off)<sizeof(T)) {
+    const uint8_t* data(size_t off=0, size_t len=0) const {
+        if (off>_state.len || (_state.len-off)<len) {
             const uintmax_t validFirst = 0;
             const uintmax_t validLast = _state.len-1;
             const uintmax_t accessFirst = off;
-            const uintmax_t accessLast = off+sizeof(T)-1;
+            const uintmax_t accessLast = off+len-1;
             throw RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
                 validFirst, validLast,
                 accessFirst, accessLast
             );
         }
-        return (const T*)(_state.data+off);
+        return (const uint8_t*)(_state.data+off);
     }
     
     size_t len() const { return _state.len; }
