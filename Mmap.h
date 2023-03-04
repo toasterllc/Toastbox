@@ -41,11 +41,11 @@ public:
         _init(fd, cap, flags);
     }
     
-    // Copy constructor: not allowed
+    // Copy: deleted
     Mmap(const Mmap& x) = delete;
-    // Move constructor: allowed
+    Mmap& operator=(const Mmap& x) = delete;
+    // Move: allowed
     Mmap(Mmap&& x) { swap(x); }
-    // Move assignment operator: allowed
     Mmap& operator=(Mmap&& x) { swap(x); return *this; }
     
     ~Mmap() {
