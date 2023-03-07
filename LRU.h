@@ -20,6 +20,12 @@ public:
         T_Val val;
     };
     
+    void insert(const T_Key& key, const T_Val& val) {
+        _list.push_front(ListVal{key, val});
+        const auto [_, ok] = _map.insert(std::make_pair(key, _list.begin()));
+        assert(ok);
+    }
+    
     void insert(const T_Key& key, T_Val&& val) {
         _list.push_front(ListVal{key, std::move(val)});
         const auto [_, ok] = _map.insert(std::make_pair(key, _list.begin()));
