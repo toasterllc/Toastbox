@@ -70,13 +70,13 @@ public:
     
     const uint8_t* data(size_t off=0, size_t len=0) const {
         if (off>_state.len || (_state.len-off)<len) {
-            const uintmax_t validFirst = 0;
-            const uintmax_t validLast = _state.len-1;
-            const uintmax_t accessFirst = off;
-            const uintmax_t accessLast = off+len-1;
-            throw RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx], accessed: [0x%jx,0x%jx])",
-                validFirst, validLast,
-                accessFirst, accessLast
+            const uintmax_t validBegin = 0;
+            const uintmax_t validEnd = _state.len;
+            const uintmax_t accessBegin = off;
+            const uintmax_t accessEnd = off+len;
+            throw RuntimeError("access beyond valid region (valid: [0x%jx,0x%jx), accessed: [0x%jx,0x%jx))",
+                validBegin, validEnd,
+                accessBegin, accessEnd
             );
         }
         return (const uint8_t*)(_state.data+off);
