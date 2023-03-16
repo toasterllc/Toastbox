@@ -14,7 +14,7 @@ namespace Toastbox {
 //   from the item returned by rget(), and when reading is
 //   complete, calls rpop().
 
-template <typename T_Item, size_t T_Count, auto T_Assert=nullptr>
+template <typename T_Item, size_t T_Count, bool T_FullReset=false, auto T_Assert=nullptr>
 class Queue {
 public:
     // Read
@@ -51,14 +51,14 @@ public:
     void reset() {
         _w = 0;
         _r = 0;
-        _full = false;
+        _full = T_FullReset;
     }
     
 private:
     T_Item _items[T_Count];
     size_t _w = 0;
     size_t _r = 0;
-    bool _full = false;
+    bool _full = T_FullReset;
     
     static void _Assert(bool c) {
         if constexpr (!std::is_same<decltype(T_Assert), std::nullptr_t>::value) {
