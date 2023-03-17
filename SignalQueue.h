@@ -4,8 +4,8 @@
 
 namespace Toastbox {
 
-template <typename T_Item, size_t T_Count, auto T_Assert=nullptr>
-class SignalQueue : private Queue<T_Item,T_Count,T_Assert> {
+template <typename T_Item, size_t T_Count, bool T_FullReset=false, auto T_Assert=nullptr>
+class SignalQueue : private Queue<T_Item,T_Count,T_FullReset,T_Assert> {
 public:
     auto& rget() {
         auto lock = _signal.wait([&] { return _Super::rok(); });
@@ -42,7 +42,7 @@ public:
     }
     
 private:
-    using _Super = Queue<T_Item,T_Count,T_Assert>;
+    using _Super = Queue<T_Item,T_Count,T_FullReset,T_Assert>;
     Signal _signal;
 };
 
