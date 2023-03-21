@@ -3,9 +3,9 @@
 
 namespace Toastbox {
 
-// AnyIter: wrapper that can hold either a forward iterator or a reverse iterator
+// IterAny: wrapper that can hold either a forward iterator or a reverse iterator
 template<typename T_Fwd, typename T_Rev=std::reverse_iterator<T_Fwd>>
-struct AnyIter : std::variant<T_Fwd,T_Rev> {
+struct IterAny : std::variant<T_Fwd,T_Rev> {
     using iterator_category = typename T_Fwd::iterator_category;
     using difference_type   = typename T_Fwd::difference_type;
     using value_type        = typename T_Fwd::value_type;
@@ -24,65 +24,65 @@ struct AnyIter : std::variant<T_Fwd,T_Rev> {
         else       return revGet().operator->();
     }
     
-    AnyIter& operator++() {
+    IterAny& operator++() {
         if (fwd()) ++fwdGet();
         else       ++revGet();
         return *this;
     }
     
-    AnyIter& operator--() {
+    IterAny& operator--() {
         if (fwd()) --fwdGet();
         else       --revGet();
         return *this;
     }
     
-    AnyIter operator++(int) {
-        AnyIter x(*this);
+    IterAny operator++(int) {
+        IterAny x(*this);
         if (fwd()) fwdGet()++;
         else       revGet()++;
         return x;
     }
     
-    AnyIter operator--(int) {
-        AnyIter x(*this);
+    IterAny operator--(int) {
+        IterAny x(*this);
         if (fwd()) fwdGet()--;
         else       revGet()--;
         return x;
     }
     
-    AnyIter operator+(const difference_type& x) const {
+    IterAny operator+(const difference_type& x) const {
         if (fwd()) return fwdGet()+x;
         else       return revGet()+x;
     }
     
-    AnyIter operator-(const difference_type& x) const {
+    IterAny operator-(const difference_type& x) const {
         if (fwd()) return fwdGet()-x;
         else       return revGet()-x;
     }
     
-    difference_type operator-(const AnyIter& x) const {
+    difference_type operator-(const IterAny& x) const {
         if (fwd()) return fwdGet()-x.fwdGet();
         else       return revGet()-x.revGet();
     }
     
-    AnyIter& operator+=(const difference_type& x) {
+    IterAny& operator+=(const difference_type& x) {
         if (fwd()) fwdGet()+=x;
         else       revGet()+=x;
         return *this;
     }
     
-    AnyIter& operator-=(const difference_type& x) {
+    IterAny& operator-=(const difference_type& x) {
         if (fwd()) fwdGet()-=x;
         else       revGet()-=x;
         return *this;
     }
     
-    bool operator==(const AnyIter& x) {
+    bool operator==(const IterAny& x) {
         if (fwd()) return fwdGet() == x.fwdGet();
         else       return revGet() == x.revGet();
     }
     
-    bool operator!=(const AnyIter& x) {
+    bool operator!=(const IterAny& x) {
         if (fwd()) return fwdGet() != x.fwdGet();
         else       return revGet() != x.revGet();
     }
