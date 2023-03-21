@@ -2,6 +2,8 @@
 #import <map>
 #import <list>
 
+namespace Toastbox {
+
 template <typename T_Key, typename T_Val>
 class LRU {
 public:
@@ -76,3 +78,5 @@ private:
     _Map _map;
     _List _list;
 };
+
+} // namespace Toastbox
