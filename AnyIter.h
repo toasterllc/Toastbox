@@ -15,86 +15,86 @@ struct AnyIter : std::variant<T_Fwd,T_Rev> {
     using std::variant<T_Fwd,T_Rev>::variant;
     
     reference operator*() const {
-        if (forward()) return *forwardGet();
-        else           return *reverseGet();
+        if (fwd()) return *fwdGet();
+        else       return *revGet();
     }
     
     pointer operator->() {
-        if (forward()) return forwardGet().operator->();
-        else           return reverseGet().operator->();
+        if (fwd()) return fwdGet().operator->();
+        else       return revGet().operator->();
     }
     
     AnyIter& operator++() {
-        if (forward()) ++forwardGet();
-        else           ++reverseGet();
+        if (fwd()) ++fwdGet();
+        else       ++revGet();
         return *this;
     }
     
     AnyIter& operator--() {
-        if (forward()) --forwardGet();
-        else           --reverseGet();
+        if (fwd()) --fwdGet();
+        else       --revGet();
         return *this;
     }
     
     AnyIter operator++(int) {
         AnyIter x(*this);
-        if (forward()) forwardGet()++;
-        else           reverseGet()++;
+        if (fwd()) fwdGet()++;
+        else       revGet()++;
         return x;
     }
     
     AnyIter operator--(int) {
         AnyIter x(*this);
-        if (forward()) forwardGet()--;
-        else           reverseGet()--;
+        if (fwd()) fwdGet()--;
+        else       revGet()--;
         return x;
     }
     
     AnyIter operator+(const difference_type& x) const {
-        if (forward()) return forwardGet()+x;
-        else           return reverseGet()+x;
+        if (fwd()) return fwdGet()+x;
+        else       return revGet()+x;
     }
     
     AnyIter operator-(const difference_type& x) const {
-        if (forward()) return forwardGet()-x;
-        else           return reverseGet()-x;
+        if (fwd()) return fwdGet()-x;
+        else       return revGet()-x;
     }
     
     difference_type operator-(const AnyIter& x) const {
-        if (forward()) return forwardGet()-x.forwardGet();
-        else           return reverseGet()-x.reverseGet();
+        if (fwd()) return fwdGet()-x.fwdGet();
+        else       return revGet()-x.revGet();
     }
     
     AnyIter& operator+=(const difference_type& x) {
-        if (forward()) forwardGet()+=x;
-        else           reverseGet()+=x;
+        if (fwd()) fwdGet()+=x;
+        else       revGet()+=x;
         return *this;
     }
     
     AnyIter& operator-=(const difference_type& x) {
-        if (forward()) forwardGet()-=x;
-        else           reverseGet()-=x;
+        if (fwd()) fwdGet()-=x;
+        else       revGet()-=x;
         return *this;
     }
     
     bool operator==(const AnyIter& x) {
-        if (forward()) return forwardGet() == x.forwardGet();
-        else           return reverseGet() == x.reverseGet();
+        if (fwd()) return fwdGet() == x.fwdGet();
+        else       return revGet() == x.revGet();
     }
     
     bool operator!=(const AnyIter& x) {
-        if (forward()) return forwardGet() != x.forwardGet();
-        else           return reverseGet() != x.reverseGet();
+        if (fwd()) return fwdGet() != x.fwdGet();
+        else       return revGet() != x.revGet();
     }
     
-    bool forward() const { return std::holds_alternative<T_Fwd>(*this); }
-    bool reverse() const { return std::holds_alternative<T_Rev>(*this); }
+    bool fwd() const { return std::holds_alternative<T_Fwd>(*this); }
+    bool rev() const { return std::holds_alternative<T_Rev>(*this); }
     
-    const T_Fwd& forwardGet() const { return std::get<T_Fwd>(*this); }
-    const T_Rev& reverseGet() const { return std::get<T_Rev>(*this); }
+    const T_Fwd& fwdGet() const { return std::get<T_Fwd>(*this); }
+    const T_Rev& revGet() const { return std::get<T_Rev>(*this); }
     
-    T_Fwd& forwardGet() { return std::get<T_Fwd>(*this); }
-    T_Rev& reverseGet() { return std::get<T_Rev>(*this); }
+    T_Fwd& fwdGet() { return std::get<T_Fwd>(*this); }
+    T_Rev& revGet() { return std::get<T_Rev>(*this); }
 };
 
 } // namespace Toastbox
