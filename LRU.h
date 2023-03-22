@@ -22,15 +22,19 @@ public:
         T_Val val;
     };
     
-    _ListIter insert(const T_Key& key, T_Val val) {
-        _list.push_front({.key=key, .val=std::move(val)});
-        const auto [it, ok] = _map.insert(std::make_pair(key, _list.begin()));
-        if (!ok) {
-            _list.erase(it->second);
-            it->second = _list.begin();
-        }
-        return _list.begin();
-    }
+//    // insert(): unconditionally inserts a key-value pair
+//    // returns an iterator to the inserted element, and whether this was the initial insertion
+//    std::pair<_ListIter,bool> insert(const T_Key& key, T_Val val) {
+//        _list.push_front({.key=key, .val=std::move(val)});
+//        const auto [it, init] = _map.insert(std::make_pair(key, _list.begin()));
+//        // If the entry already existed, erase the previous list entry
+//        // and update the map entry with the new iterator.
+//        if (!init) {
+//            _list.erase(it->second);
+//            it->second = _list.begin();
+//        }
+//        return std::make_pair(_list.begin(), init);
+//    }
     
     
 //    template<typename _T_Val>
@@ -83,17 +87,27 @@ public:
 //        return rit;
 //    }
     
-    void erase(_ListIter it) {
+    void erase(_ListConstIter it) {
         const bool ok = _map.erase(it->key);
         assert(ok);
         _list.erase(it);
+    }
+    
+    T_Val& operator[] (const T_Key& key) {
+        _list.push_front({.key=key});
+        const auto [it, init] = _map.insert(std::make_pair(key, _list.begin()));
+        // If the entry already existed, erase the previous list entry
+        if (!init) {
+            _list.erase(it->second);
+            it->second = _list.begin();
+        }
+        return it->second->val;
     }
     
     _ListIter find(const T_Key& key) {
         // Find element
         auto it = _map.find(key);
         if (it == _map.end()) return _list.end();
-        
         // Move element to front of list
         _list.splice(_list.begin(), _list, it->second);
         // Update the map entry with its new position in _list
