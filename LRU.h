@@ -141,6 +141,10 @@ public:
         }
     }
     
+    size_t size() const {
+        return _list.size();
+    }
+    
     void _evictIfNeeded() {
         // Evict if we're above our capacity (T_Cap)
         if (_list.size() >= T_Cap) {

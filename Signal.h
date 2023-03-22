@@ -9,7 +9,7 @@ public:
     struct Stop : std::exception {};
     
     template <typename T_Cond>
-    void wait(std::unique_lock<std::mutex> lock, T_Cond cond) {
+    void wait(std::unique_lock<std::mutex>& lock, T_Cond cond) {
         _cv.wait(lock, [&] {
             if (_stop) throw Stop();
             return cond();
