@@ -22,19 +22,59 @@ public:
         T_Val val;
     };
     
-    _ListIter insert(const T_Key& key, const T_Val& val) {
-        _list.push_front(ListVal{key, val});
-        const auto [_, ok] = _map.insert(std::make_pair(key, _list.begin()));
-        assert(ok);
+    _ListIter insert(const T_Key& key, T_Val val) {
+        _list.push_front({.key=key, .val=std::move(val)});
+        const auto [it, ok] = _map.insert(std::make_pair(key, _list.begin()));
+        if (!ok) {
+            _list.erase(it->second);
+            it->second = _list.begin();
+        }
         return _list.begin();
     }
     
-    _ListIter insert(const T_Key& key, T_Val&& val) {
-        _list.push_front(ListVal{key, std::move(val)});
-        const auto [_, ok] = _map.insert(std::make_pair(key, _list.begin()));
-        assert(ok);
-        return _list.begin();
-    }
+    
+//    template<typename _T_Val>
+//    _ListIter insert(const T_Key& key, _T_Val val) {
+//        _list.push_front({.key=key, .val=std::move(val)});
+////        _list.front().key = key;
+////        _list.front().val = std::move(val);
+//        const auto [it, ok] = _map.insert(std::make_pair(key, _list.begin()));
+//        if (!ok) {
+//            _list.erase(it->second);
+//            it->second = _list.begin();
+//        }
+//        return _list.begin();
+//    }
+    
+    
+    
+//    _ListIter insert(const T_Key& key, T_Val&& val) {
+//        _list.push_front({.key=key, .val=std::move(val)});
+////        _list.front().key = key;
+////        _list.front().val = std::move(val);
+//        const auto [it, ok] = _map.insert(std::make_pair(key, _list.begin()));
+//        if (!ok) {
+//            _list.erase(it->second);
+//            it->second = _list.begin();
+//        }
+//        return _list.begin();
+//    }
+    
+    
+//    template <typename _T_Val>
+//    _ListIter insert(const T_Key& key, _T_Val val) {
+//        _list.push_front(ListVal{key, std::move(val)});
+//        const auto [it, ok] = _map.insert(std::make_pair(key, _list.begin()));
+//        if (!ok) {
+//            _list.erase(it->second);
+//            it->second = _list.begin();
+//        }
+//        return _list.begin();
+//    }
+    
+//    _ListIter insert(const T_Key& key, T_Val val) {
+//        return insert(key, std::move(val));
+//    }
     
 //    _ListIter insert(_MapIter it, const T_Key& key, T_Val&& val) {
 //        _list.push_front(ListVal{key, std::move(val)});
@@ -49,7 +89,7 @@ public:
         _list.erase(it);
     }
     
-    _ListIter get(const T_Key& key) {
+    _ListIter find(const T_Key& key) {
         // Find element
         auto it = _map.find(key);
         if (it == _map.end()) return _list.end();
