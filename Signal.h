@@ -9,12 +9,17 @@ public:
     struct Stop : std::exception {};
     
     template <typename T_Cond>
-    auto wait(T_Cond cond) {
-        auto l = std::unique_lock(_lock);
-        _cv.wait(l, [&] {
+    void wait(std::unique_lock<std::mutex> lock, T_Cond cond) {
+        _cv.wait(lock, [&] {
             if (_stop) throw Stop();
             return cond();
         });
+    }
+    
+    template <typename T_Cond>
+    auto wait(T_Cond cond) {
+        auto l = std::unique_lock(_lock);
+        wait(l, cond);
         return l;
     }
     

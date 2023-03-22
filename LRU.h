@@ -4,7 +4,7 @@
 
 namespace Toastbox {
 
-template <typename T_Key, typename T_Val>
+template<typename T_Key, typename T_Val, size_t T_Cap>
 class LRU {
 public:
     struct ListVal;
@@ -23,7 +23,7 @@ public:
     };
     
 //    // insert(): unconditionally inserts a key-value pair
-//    // returns an iterator to the inserted element, and whether this was the initial insertion
+//    // returns an iterator to the inserted entry, and whether this was the initial insertion
 //    std::pair<_ListIter,bool> insert(const T_Key& key, T_Val val) {
 //        _list.push_front({.key=key, .val=std::move(val)});
 //        const auto [it, init] = _map.insert(std::make_pair(key, _list.begin()));
@@ -100,15 +100,19 @@ public:
         if (!init) {
             _list.erase(it->second);
             it->second = _list.begin();
+        
+        // If the entry didn't already exist, evict entries if needed
+        } else {
+            _evictIfNeeded();
         }
         return it->second->val;
     }
     
     _ListIter find(const T_Key& key) {
-        // Find element
+        // Find entry
         auto it = _map.find(key);
         if (it == _map.end()) return _list.end();
-        // Move element to front of list
+        // Move entry to front of list
         _list.splice(_list.begin(), _list, it->second);
         // Update the map entry with its new position in _list
         it->second = _list.begin();
@@ -126,6 +130,22 @@ public:
     const ListVal& back() const {
         assert(!_list.empty());
         return _list.back();
+    }
+    
+    void evict() {
+        constexpr size_t LowWater = (T_Cap*4)/5;
+        static_assert(LowWater > 0);
+        // Evict until we get to our low-water mark (20% below our capacity)
+        while (_list.size() > LowWater) {
+            erase(std::prev(_list.end()));
+        }
+    }
+    
+    void _evictIfNeeded() {
+        // Evict if we're above our capacity (T_Cap)
+        if (_list.size() >= T_Cap) {
+            evict();
+        }
     }
     
 private:
