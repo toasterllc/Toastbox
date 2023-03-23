@@ -19,7 +19,7 @@ struct IterAny : std::variant<T_Fwd,T_Rev> {
         else       return *revGet();
     }
     
-    pointer operator->() {
+    pointer operator->() const {
         if (fwd()) return fwdGet().operator->();
         else       return revGet().operator->();
     }
@@ -77,12 +77,12 @@ struct IterAny : std::variant<T_Fwd,T_Rev> {
         return *this;
     }
     
-    bool operator==(const IterAny& x) {
+    bool operator==(const IterAny& x) const {
         if (fwd()) return fwdGet() == x.fwdGet();
         else       return revGet() == x.revGet();
     }
     
-    bool operator!=(const IterAny& x) {
+    bool operator!=(const IterAny& x) const {
         if (fwd()) return fwdGet() != x.fwdGet();
         else       return revGet() != x.revGet();
     }
