@@ -4,22 +4,16 @@
 #include <charconv>
 #include <type_traits>
 #include "RuntimeError.h"
-#include "Mac/Util.h"
 
 namespace Toastbox {
 
 template<typename T>
 static T IntForStr(std::string_view s, uint8_t base=10) {
-    printf("IntForStr() BEFORE: %s\n", s.data());
-    
     constexpr bool T_Signed = std::numeric_limits<T>::is_signed;
     using T_IntType = typename std::conditional<T_Signed, intmax_t, uintmax_t>::type;
     T_IntType i = 0;
     
     auto r = std::from_chars(s.data(), s.data()+s.size(), i, base);
-    
-    printf("IntForStr() AFTER: %s (r.ec: %jd)\n", s.data(), (intmax_t)std::to_underlying(r.ec));
-    
     if (r.ec != std::errc()) throw RuntimeError("invalid integer: %s", std::string(s).c_str());
     
     if constexpr (T_Signed) {
