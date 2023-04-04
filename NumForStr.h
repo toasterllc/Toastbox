@@ -34,4 +34,18 @@ static void IntForStr(T& i, std::string_view s, uint8_t base=10) {
     i = IntForStr<T>(s);
 }
 
+template<typename T>
+static T FloatForStr(std::string_view s) {
+    return std::stod(std::string(s));
+//    T y;
+//    auto r = std::from_chars(s.data(), s.data()+s.size(), y);
+//    if (r.ec != std::errc()) throw RuntimeError("invalid float: %s", std::string(s).c_str());
+//    return y;
+}
+
+template <typename T>
+static void FloatForStr(T& i, std::string_view s) {
+    i = FloatForStr<T>(s);
+}
+
 } // namespace Toastbox
