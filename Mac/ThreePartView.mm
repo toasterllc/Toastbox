@@ -93,17 +93,16 @@ static void _AuxViewInit(ThreePartView* self, AuxView& auxView, bool left) {
             relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute
             multiplier:0 constant:LeftRightWidth::Default];
         [auxView.width setPriority:NSLayoutPriorityDragThatCannotResizeWindow];
-        [self addConstraint:auxView.width];
+        [auxView.width setActive:true];
         
         auxView.widthMin = [NSLayoutConstraint constraintWithItem:auxView.containerView attribute:NSLayoutAttributeWidth
             relatedBy:NSLayoutRelationGreaterThanOrEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute
             multiplier:0 constant:LeftRightWidth::Min];
+        [auxView.widthMin setActive:true];
         
         NSView* x = auxView.containerView;
-        [self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[x]|"
+        [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[x]|"
             options:0 metrics:nil views:NSDictionaryOfVariableBindings(x)]];
-        
-        [self addConstraint:auxView.widthMin];
     }
     
     // Resizer
@@ -115,13 +114,15 @@ static void _AuxViewInit(ThreePartView* self, AuxView& auxView, bool left) {
         auxView.resizerView->cursor = [NSCursor resizeLeftRightCursor];
         
         [self addSubview:auxView.resizerView];
-        [auxView.resizerView addConstraint:[NSLayoutConstraint constraintWithItem:auxView.resizerView attribute:NSLayoutAttributeWidth
-            relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:ResizerWidth]];
-        [self addConstraint:[NSLayoutConstraint constraintWithItem:auxView.resizerView attribute:NSLayoutAttributeHeight
-            relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeHeight multiplier:1 constant:0]];
-        [self addConstraint:[NSLayoutConstraint constraintWithItem:auxView.resizerView attribute:NSLayoutAttributeCenterX
+        [[NSLayoutConstraint constraintWithItem:auxView.resizerView attribute:NSLayoutAttributeWidth
+            relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:ResizerWidth] setActive:true];
+        
+        [[NSLayoutConstraint constraintWithItem:auxView.resizerView attribute:NSLayoutAttributeHeight
+            relatedBy:NSLayoutRelationEqual toItem:self attribute:NSLayoutAttributeHeight multiplier:1 constant:0] setActive:true];
+        
+        [[NSLayoutConstraint constraintWithItem:auxView.resizerView attribute:NSLayoutAttributeCenterX
             relatedBy:NSLayoutRelationEqual toItem:auxView.containerView attribute:(left ? NSLayoutAttributeRight : NSLayoutAttributeLeft)
-            multiplier:1 constant:0]];
+            multiplier:1 constant:0] setActive:true];
     }
 }
 
@@ -130,9 +131,9 @@ static void _ThreePartViewSet(NSView* containerView, NSView*__strong& lhs, NSVie
     lhs = rhs;
     [containerView addSubview:lhs];
     
-    [containerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[lhs]|"
+    [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[lhs]|"
         options:0 metrics:nil views:NSDictionaryOfVariableBindings(lhs)]];
-    [containerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[lhs]|"
+    [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[lhs]|"
         options:0 metrics:nil views:NSDictionaryOfVariableBindings(lhs)]];
 }
 
@@ -159,15 +160,15 @@ static void _ThreePartViewSet(NSView* containerView, NSView*__strong& lhs, NSVie
         NSView* c = _centerThreePartView;
         NSView* r = _right.containerView;
         
-        [self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[l][c][r]|"
+        [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[l][c][r]|"
             options:0 metrics:nil views:NSDictionaryOfVariableBindings(l, c, r)]];
         
-        [self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[_centerThreePartView]|"
+        [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[_centerThreePartView]|"
             options:0 metrics:nil views:NSDictionaryOfVariableBindings(_centerThreePartView)]];
         
-        [self addConstraint:[NSLayoutConstraint constraintWithItem:_centerThreePartView attribute:NSLayoutAttributeWidth
+        [[NSLayoutConstraint constraintWithItem:_centerThreePartView attribute:NSLayoutAttributeWidth
             relatedBy:NSLayoutRelationGreaterThanOrEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute
-            multiplier:0 constant:CenterWidth::Min]];
+            multiplier:0 constant:CenterWidth::Min] setActive:true];
         
     }
 }
@@ -196,9 +197,9 @@ static void _ThreePartViewSet(NSView* containerView, NSView*__strong& lhs, NSVie
 //    
 //    [_centerView setTranslatesAutoresizingMaskIntoConstraints:false];
 //    [_contentThreePartView addSubview:centerView];
-//    [_contentThreePartView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[_centerView]|"
+//    [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[_centerView]|"
 //        options:0 metrics:nil views:NSDictionaryOfVariableBindings(_centerView)]];
-//    [_contentThreePartView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[_centerView]|"
+//    [NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[_centerView]|"
 //        options:0 metrics:nil views:NSDictionaryOfVariableBindings(_centerView)]];
 //    
 ////    if (_centerView) {
