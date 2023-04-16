@@ -69,6 +69,12 @@ public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
     
+    // Run(): initial program entry point
+    // Invokes the first tasks
+    static void Run() {
+        _TaskRun();
+    }
+    
     // Start(): init the task's stack
     template <typename T_Task>
     static void Start(_TaskFn run=T_Task::Run) {
@@ -113,28 +119,6 @@ public:
     template <typename... T_Tsks>
     static void Wait() {
         return Wait([] { return !Running<T_Tsks...>(); });
-    }
-    
-    // Run(): run the scheduler indefinitely
-    // Automatically starts `Tasks`
-    [[noreturn]]
-    static void Run() {
-        // Initialize each task's stack guard
-        if constexpr (_StackGuardEnabled) {
-            for (_Task& task : _Tasks) {
-                _StackGuardInit(*task.stackGuard);
-            }
-        }
-        
-        // Initialize the interrupt stack guard
-        if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
-        
-        // junk: dummy task that _TaskSwap saves the current stack pointer to,
-        // which is thrown away.
-        _Task junk = { .stackGuard=_Tasks[0].stackGuard, .next=&_Tasks[0] };
-        _TaskCurr = &junk;
-        _TaskSwap(nullptr);
-        for (;;);
     }
     
     // Yield(): yield current task to the scheduler
@@ -393,6 +377,18 @@ private:
     }
     
     // MARK: - Stack Guard
+    [[gnu::constructor]]
+    static void _StackGuardInit() {
+        // Initialize each task's stack guard
+        if constexpr (_StackGuardEnabled) {
+            for (_Task& task : _Tasks) {
+                _StackGuardInit(*task.stackGuard);
+            }
+        }
+        
+        // Initialize the interrupt stack guard
+        if constexpr (_InterruptStackGuardEnabled) _StackGuardInit(_InterruptStackGuard);
+    }
     
     static void _StackGuardInit(_StackGuard& guard) {
         for (uintptr_t& x : guard) {
@@ -523,7 +519,7 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
     static inline _Task* _TaskPrev = nullptr;
-    static inline _Task* _TaskCurr = nullptr;
+    static inline _Task* _TaskCurr = _Tasks[0];
     
     static inline struct {
         Ticks CurrentTime = 0;
