@@ -69,9 +69,10 @@ public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
     
-    // Run(): initial scheduler entry point
+    // Run(): scheduler entry point
     // Invokes task 0's Run() function
     static void Run() {
+        _StackGuardInit();
         _TaskRun();
     }
     
@@ -377,7 +378,6 @@ private:
     }
     
     // MARK: - Stack Guard
-    [[gnu::constructor]]
     static void _StackGuardInit() {
         // Initialize each task's stack guard
         if constexpr (_StackGuardEnabled) {
