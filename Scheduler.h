@@ -69,8 +69,8 @@ public:
     using Ticks     = unsigned int;
     using Deadline  = Ticks;
     
-    // Run(): initial program entry point
-    // Invokes the first tasks
+    // Run(): initial scheduler entry point
+    // Invokes task 0's Run() function
     static void Run() {
         _TaskRun();
     }
@@ -487,6 +487,17 @@ private:
     }
     
     // _TaskGet(): returns the _Task& for the given T_Task
+    template <typename T_Task>
+    static constexpr _TaskFn _Task0RunFn() {
+        static_assert((std::is_same_v<T_Task, T_Tasks> || ...), "invalid task");
+        constexpr size_t idx = _ElmIdx<T_Task, T_Tasks...>();
+        if constexpr (idx == 0) {
+            return T_Task::Run;
+        }
+        return nullptr;
+    }
+    
+    // _TaskGet(): returns the _Task& for the given T_Task
     template <typename T_Task, size_t T_Delta=0>
     static constexpr _Task& _TaskGet() {
         static_assert((std::is_same_v<T_Task, T_Tasks> || ...), "invalid task");
@@ -501,7 +512,7 @@ private:
     
     static inline _Task _Tasks[sizeof...(T_Tasks)] = {
         _Task{
-            .run        = nullptr,
+            .run        = _Task0RunFn<T_Tasks>(),
             .runnable   = _RunnableFalse,
             .sp         = nullptr,
             .stackGuard = (_StackGuard*)T_Tasks::Stack,
@@ -519,7 +530,7 @@ private:
     // In C++20 we could use std::bit_cast for this.
     static inline _StackGuard& _InterruptStackGuard = *(_StackGuard*)T_StackInterrupt;
     static inline _Task* _TaskPrev = nullptr;
-    static inline _Task* _TaskCurr = _Tasks[0];
+    static inline _Task* _TaskCurr = &_Tasks[0];
     
     static inline struct {
         Ticks CurrentTime = 0;
