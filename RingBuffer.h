@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdlib>
 #include <algorithm>
+#include <cassert>
 
 namespace Toastbox {
 
@@ -20,8 +21,7 @@ public:
     }
     
     void read(T* data, size_t len) {
-        // Not using assert() so we can use this on STM32
-        if (len > this->len()) abort();
+        assert(len <= this->len());
         
         // Read segment 1 (_roff to end)
         size_t rem = len;
@@ -53,8 +53,7 @@ public:
     template <bool Overwrite>
     void write(const T* data, size_t len) {
         if constexpr (!Overwrite) {
-            // Not using assert() so we can use this on STM32
-            if (len > space()) abort();
+            assert(len <= space());
         } else {
             // Overwriting is allowed
             

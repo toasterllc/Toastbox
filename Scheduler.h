@@ -71,9 +71,11 @@ public:
     
     // Run(): scheduler entry point
     // Invokes task 0's Run() function
+    [[noreturn]]
     static void Run() {
         _StackGuardInit();
         _TaskRun();
+        for (;;);
     }
     
     // Start(): init the task's stack
