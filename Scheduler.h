@@ -5,6 +5,11 @@
 #include <optional>
 #include <array>
 
+// SchedulerStack: macro to apply appropriate attributes to stack declarations
+// gnu::used is apparently necessary for the gnu::section attribute to work when
+// link-time optimization is enabled.
+#define SchedulerStack(sect) [[gnu::section(sect), gnu::used]] alignas(void*)
+
 namespace Toastbox {
 
 // MARK: - IntState
