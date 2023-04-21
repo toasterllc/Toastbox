@@ -349,7 +349,6 @@ private:
         static_assert(sizeof(void*) == 4);
         #define _SchedulerStackAlign            1   // Count of pointer-sized registers to which the stack needs to be aligned
         #define _SchedulerStackSaveRegCount     7   // Count of pointer-sized registers that we save below (excluding $PC)
-        // Large memory model
         asm volatile("pushm.a #7, r10" : : : );                         // (1)
         asm volatile("mov.a sp, %0" : "=m" (_TaskPrev->sp) : : );       // (2)
         asm volatile("mov.a %0, sp" : : "m" (_TaskCurr->sp) : );        // (3)
