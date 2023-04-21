@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <optional>
 #include <array>
+#include <limits>
 
 // SchedulerStack: macro to apply appropriate attributes to stack declarations
 // gnu::used is apparently necessary for the gnu::section attribute to work when
