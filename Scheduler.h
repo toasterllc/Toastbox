@@ -293,6 +293,11 @@ public:
         return _ISR.CurrentTime;
     }
     
+    static std::optional<WakeDeadline> WakeDeadline() {
+        IntState ints(false);
+        return _ISR.WakeDeadline;
+    }
+    
 private:
     // MARK: - Types
     
