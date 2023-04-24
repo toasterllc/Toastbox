@@ -232,6 +232,7 @@ public:
     }
     
     // Delay(ticks): delay current task for `ticks` without allowing other tasks to run
+    // Enables interrupts at least once.
     static void Delay(Ticks ticks) {
         IntState ints(false);
         const Deadline deadline = _ISR.CurrentTime+ticks;
