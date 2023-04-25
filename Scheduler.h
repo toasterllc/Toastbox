@@ -294,7 +294,7 @@ public:
         return _ISR.CurrentTime;
     }
     
-    static std::optional<WakeDeadline> WakeDeadline() {
+    static std::optional<Deadline> WakeDeadline() {
         IntState ints(false);
         return _ISR.WakeDeadline;
     }
