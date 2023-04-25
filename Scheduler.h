@@ -549,6 +549,7 @@ private:
     static inline _Task* _TaskPrev = nullptr;
     static inline _Task* _TaskCurr = &_Tasks[0];
     
+    #warning TODO: these should be volatile no?
     static inline struct {
         Ticks CurrentTime = 0;
         std::optional<Deadline> WakeDeadline;
