@@ -3,14 +3,14 @@
 
 namespace Toastbox {
 
-template <typename T>
+template<typename T>
 T Cast(id obj) {
     using T_Class = typename std::remove_pointer<T>::type;
     assert([obj isKindOfClass:[T_Class class]]);
     return obj;
 }
 
-template <typename T>
+template<typename T>
 T CastOrNull(id obj) {
     using T_Class = typename std::remove_pointer<T>::type;
     if ([obj isKindOfClass:[T_Class class]]) return obj;
@@ -19,7 +19,7 @@ T CastOrNull(id obj) {
 
 #define CastProtocol(proto, obj) (id<proto>)([obj conformsToProtocol:@protocol(proto)] ? obj : nil)
 
-template <typename Fn>
+template<typename Fn>
 inline void TrackMouse(NSWindow* win, NSEvent* ev, Fn fn) {
     for (;;) @autoreleasepool {
         const bool done = ([ev type] == NSEventTypeLeftMouseUp);
