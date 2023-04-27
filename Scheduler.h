@@ -57,7 +57,11 @@ private:
 template <
     uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
     
-    void T_Sleep(),                     // T_Sleep: sleep function; invoked when no tasks have work to do
+    void T_Sleep(),                     // T_Sleep: sleep function; invoked when no tasks have work to do.
+                                        //   T_Sleep() is called with interrupts disabled, and interrupts must
+                                        //   be disabled upon return. Implementations may temporarily enable
+                                        //   interrupts if required for the CPU to wake from sleep, as long as
+                                        //   interrupts are disabled upon return from T_Sleep().
     
     size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
     void T_StackOverflow(),             // T_StackOverflow: function to call when stack overflow is detected
