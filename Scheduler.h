@@ -54,23 +54,22 @@ private:
 };
 
 // MARK: - Scheduler
-
 template<
-    typename T_TickPeriod,              // T_TickPeriod: a std::ratio specifying the period between Tick()
-                                        //   calls, in seconds
-    
-    void T_Sleep(),                     // T_Sleep: sleep function; invoked when no tasks have work to do.
-                                        //   T_Sleep() is called with interrupts disabled, and interrupts must
-                                        //   be disabled upon return. Implementations may temporarily enable
-                                        //   interrupts if required for the CPU to wake from sleep, as long as
-                                        //   interrupts are disabled upon return from T_Sleep().
-    
-    size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
-    void T_StackOverflow(),             // T_StackOverflow: function to call when stack overflow is detected
-    auto T_StackInterrupt,              // T_StackInterrupt: interrupt stack pointer (only used to monitor
-                                        //   interrupt stack for overflow; unused if T_StackGuardCount==0)
-    
-    typename... T_Tasks                 // T_Tasks: list of tasks
+typename T_TicksPeriod,             // T_TicksPeriod: a std::ratio specifying the period between Tick()
+                                    //   calls, in seconds
+
+void T_Sleep(),                     // T_Sleep: sleep function; invoked when no tasks have work to do.
+                                    //   T_Sleep() is called with interrupts disabled, and interrupts must
+                                    //   be disabled upon return. Implementations may temporarily enable
+                                    //   interrupts if required for the CPU to wake from sleep, as long as
+                                    //   interrupts are disabled upon return from T_Sleep().
+
+size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
+void T_StackOverflow(),             // T_StackOverflow: function to call when stack overflow is detected
+auto T_StackInterrupt,              // T_StackInterrupt: interrupt stack pointer (only used to monitor
+                                    //   interrupt stack for overflow; unused if T_StackGuardCount==0)
+
+typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
 public:
@@ -86,7 +85,7 @@ private:
         // We're intentionally not ceiling the result because Sleep() implicitly
         // ceils by adding one tick (to prevent truncated sleeps), so if this
         // function ceiled too, we'd always sleep one more tick than needed.
-        using TicksPerTime = std::ratio_divide<T_Unit, T_TickPeriod>;
+        using TicksPerTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
         const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
         static_assert(ticks <= _TicksMax);
         return ticks;
