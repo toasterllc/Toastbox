@@ -92,6 +92,8 @@ private:
     }
     
 public:
+    using TicksPeriod = T_TicksPeriod;
+    
     // Run(): scheduler entry point
     // Invokes task 0's Run() function
     [[noreturn]]
@@ -267,7 +269,7 @@ public:
     }
     
     // Tick(): notify scheduler that a tick has passed
-    // Returns whether the scheduler needs to run
+    // Returns whether the CPU should wake to allow the scheduler to run
     static bool Tick() {
         // Wake tasks matching the current tick.
         // We wake tasks for deadline `N` only when updating CurrentTime to
