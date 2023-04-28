@@ -5,6 +5,7 @@
 #include <optional>
 #include <array>
 #include <limits>
+#include <ratio>
 
 // SchedulerStack: macro to apply appropriate attributes to stack declarations
 // gnu::used is apparently necessary for the gnu::section attribute to work when
@@ -55,7 +56,8 @@ private:
 // MARK: - Scheduler
 
 template <
-    uint32_t T_UsPerTick,               // T_UsPerTick: microseconds per tick
+    typename T_TickPeriod,              // T_TickPeriod: a std::ratio specifying the period between Tick()
+                                        //   calls, in seconds
     
     void T_Sleep(),                     // T_Sleep: sleep function; invoked when no tasks have work to do.
                                         //   T_Sleep() is called with interrupts disabled, and interrupts must
@@ -225,8 +227,8 @@ public:
         return (bool)_TaskCurr->wakeDeadline;
     }
     
-    static constexpr Ticks Us(uint16_t us) { return _TicksForUs(us); }
-    static constexpr Ticks Ms(uint16_t ms) { return _TicksForUs(1000*(uint32_t)ms); }
+    static constexpr Ticks Us(uint16_t us) { return _Ticks<std::micro>(us); }
+    static constexpr Ticks Ms(uint16_t ms) { return _Ticks<std::milli>(ms); }
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
@@ -500,11 +502,15 @@ private:
         return false;
     }
     
-    static constexpr Ticks _TicksForUs(uint32_t us) {
+    template<typename T_Unit>
+    static constexpr Ticks _Ticks(uint32_t time) {
         // We're intentionally not ceiling the result because Sleep() implicitly
         // ceils by adding one tick (to prevent truncated sleeps), so if this
         // function ceiled too, we'd always sleep one more tick than needed.
-        return us / T_UsPerTick;
+        using TicksPerTime = std::ratio_divide<T_Unit, T_TickPeriod>;
+        constexpr auto ticks = (time * TicksPerTime::num) / TicksPerTime::den;
+        static_assert(ticks <= _TicksMax);
+        return ticks;
     }
     
     // _TaskGet(): returns the _Task& for the given T_Task
