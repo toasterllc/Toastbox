@@ -2,7 +2,7 @@
 
 namespace Toastbox {
 
-template <typename T>
+template<typename T>
 struct Bitfield {
     using Bit = T;
     Bitfield() {}

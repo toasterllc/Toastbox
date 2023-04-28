@@ -4,7 +4,7 @@
 
 namespace Toastbox {
 
-template <typename... Ts>
+template<typename... Ts>
 size_t HashInts(Ts... ts) {
     // FNV-1 hash
     const uintmax_t v[] = {(uintmax_t)ts...};

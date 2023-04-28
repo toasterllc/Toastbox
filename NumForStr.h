@@ -29,7 +29,7 @@ static T IntForStr(std::string_view s, uint8_t base=10) {
     return (T)i;
 }
 
-template <typename T>
+template<typename T>
 static void IntForStr(T& i, std::string_view s, uint8_t base=10) {
     i = IntForStr<T>(s);
 }
@@ -43,7 +43,7 @@ static T FloatForStr(std::string_view s) {
 //    return y;
 }
 
-template <typename T>
+template<typename T>
 static void FloatForStr(T& i, std::string_view s) {
     i = FloatForStr<T>(s);
 }

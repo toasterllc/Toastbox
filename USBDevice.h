@@ -30,10 +30,10 @@ public:
 #if __APPLE__
     
 private:
-    template <typename T>
+    template<typename T>
     static void _Retain(T** x) { (*x)->AddRef(x); }
     
-    template <typename T>
+    template<typename T>
     static void _Release(T** x) { (*x)->Release(x); }
     
     using _IOCFPlugInInterface = RefCounted<IOCFPlugInInterface**, _Retain<IOCFPlugInInterface>, _Release<IOCFPlugInInterface>>;
@@ -42,7 +42,7 @@ private:
     
     class _Interface {
     public:
-        template <auto T_Fn, typename... T_Args>
+        template<auto T_Fn, typename... T_Args>
         IOReturn iokitExec(T_Args&&... args) const {
             assert(_iokitInterface);
             for (;;) {
@@ -51,7 +51,7 @@ private:
             }
         }
         
-        template <auto T_Fn, typename... T_Args>
+        template<auto T_Fn, typename... T_Args>
         IOReturn iokitExec(T_Args&&... args) {
             assert(_iokitInterface);
             for (;;) {
@@ -82,7 +82,7 @@ private:
             }
         }
         
-        template <typename T>
+        template<typename T>
         void read(uint8_t pipeRef, T& t, Milliseconds timeout=Forever) {
             const size_t len = read(pipeRef, (void*)&t, sizeof(t), timeout);
             if (len != sizeof(t)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
@@ -102,7 +102,7 @@ private:
             return len32;
         }
         
-        template <typename T>
+        template<typename T>
         void write(uint8_t pipeRef, T& x, Milliseconds timeout=Forever) {
             write(pipeRef, (void*)&x, sizeof(x), timeout);
         }
@@ -173,7 +173,7 @@ public:
         return devices;
     }
     
-    template <auto T_Fn, typename... T_Args>
+    template<auto T_Fn, typename... T_Args>
     IOReturn iokitExec(T_Args&&... args) const {
         assert(_iokitInterface);
         for (;;) {
@@ -182,7 +182,7 @@ public:
         }
     }
     
-    template <auto T_Fn, typename... T_Args>
+    template<auto T_Fn, typename... T_Args>
     IOReturn iokitExec(T_Args&&... args) {
         assert(_iokitInterface);
         for (;;) {
@@ -340,28 +340,28 @@ public:
         return desc;
     }
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     auto read(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         return iface.read(epInfo.pipeRef, std::forward<T_Args>(args)...);
     }
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     void write(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.write(epInfo.pipeRef, std::forward<T_Args>(args)...);
     }
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
     }
     
-    template <typename T>
+    template<typename T>
     void vendorRequestOut(uint8_t req, const T& x, Milliseconds timeout=Forever) {
         vendorRequestOut(req, (const void*)&x, sizeof(x), timeout);
     }
@@ -525,7 +525,7 @@ private:
         return desc;
     }
     
-    template <typename T_Dst>
+    template<typename T_Dst>
     void read(uint8_t epAddr, T_Dst& dst, Milliseconds timeout=Forever) {
         const size_t len = read(epAddr, (void*)&dst, sizeof(dst), timeout);
         if (len != sizeof(dst)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
@@ -541,7 +541,7 @@ private:
         return xferLen;
     }
     
-    template <typename T_Src>
+    template<typename T_Src>
     void write(uint8_t epAddr, T_Src& src, Milliseconds timeout=Forever) {
         write(epAddr, (void*)&src, sizeof(src), timeout);
     }
@@ -563,7 +563,7 @@ private:
         _CheckErr(ir, "libusb_clear_halt failed");
     }
     
-    template <typename T>
+    template<typename T>
     void vendorRequestOut(uint8_t req, const T& x, Milliseconds timeout=Forever) {
         vendorRequestOut(req, (void*)&x, sizeof(x), timeout);
     }

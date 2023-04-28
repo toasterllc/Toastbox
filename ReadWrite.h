@@ -79,7 +79,7 @@ std::chrono::steady_clock::time_point deadline=std::chrono::steady_clock::time_p
 }
 
 
-//template <bool T_Write>
+//template<bool T_Write>
 //inline bool _Select(int fd, const std::chrono::steady_clock::time_point& deadline) {
 //    using namespace std::chrono;
 //    int ir = 0;

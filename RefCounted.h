@@ -3,7 +3,7 @@
 
 namespace Toastbox {
 
-template <typename T, auto RetainFn, auto ReleaseFn>
+template<typename T, auto RetainFn, auto ReleaseFn>
 class RefCounted {
 public:
     struct NoRetainType {}; static constexpr auto NoRetain = NoRetainType();

@@ -8,7 +8,7 @@ class Signal {
 public:
     struct Stop : std::exception {};
     
-    template <typename T_Cond>
+    template<typename T_Cond>
     void wait(std::unique_lock<std::mutex>& lock, T_Cond cond) {
         _cv.wait(lock, [&] {
             if (_stop) throw Stop();
@@ -16,7 +16,7 @@ public:
         });
     }
     
-    template <typename T_Cond>
+    template<typename T_Cond>
     auto wait(T_Cond cond) {
         auto l = std::unique_lock(_lock);
         wait(l, cond);

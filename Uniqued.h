@@ -1,7 +1,7 @@
 #pragma once
 #include <optional>
 
-template <typename T, auto FreeFn>
+template<typename T, auto FreeFn>
 class Uniqued {
 public:
     // Default constructor: empty

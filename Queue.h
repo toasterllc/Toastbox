@@ -14,7 +14,7 @@ namespace Toastbox {
 //   from the item returned by rget(), and when reading is
 //   complete, calls rpop().
 
-template <typename T_Item, size_t T_Count, bool T_FullReset=false, auto T_Assert=nullptr>
+template<typename T_Item, size_t T_Count, bool T_FullReset=false, auto T_Assert=nullptr>
 class Queue {
 public:
     // Read

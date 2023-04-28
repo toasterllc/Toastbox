@@ -5,7 +5,7 @@
 
 namespace Toastbox {
 
-template <typename T, size_t Cap>
+template<typename T, size_t Cap>
 class RingBuffer {
 public:
     
@@ -50,7 +50,7 @@ public:
         return t;
     }
     
-    template <bool Overwrite>
+    template<bool Overwrite>
     void write(const T* data, size_t len) {
         if constexpr (!Overwrite) {
             assert(len <= space());

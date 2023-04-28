@@ -76,28 +76,28 @@ namespace Endpoint {
     constexpr bool Out(uint8_t ep)      { return (ep&DirectionMask) == DirectionOut;    }
     constexpr bool In(uint8_t ep)       { return (ep&DirectionMask) == DirectionIn;     }
     
-    template <size_t N>
+    template<size_t N>
     constexpr size_t CountOut(const uint8_t (&eps)[N]) {
         size_t count = 0;
         for (uint8_t ep : eps) count += Out(ep);
         return count;
     }
     
-    template <size_t N>
+    template<size_t N>
     constexpr size_t CountIn(const uint8_t (&eps)[N]) {
         size_t count = 0;
         for (uint8_t ep : eps) count += In(ep);
         return count;
     }
     
-    template <size_t N>
+    template<size_t N>
     constexpr inline size_t MaxPacketSizeOut(const uint8_t (&eps)[N]) {
         // Don't have OUT endpoints: MPS=control transfer MPS (64)
         // Do have OUT endpoints: MPS=bulk transfer MPS (512, the only value that the spec allows for HS bulk endpoints)
         return !CountOut(eps) ? MaxPacketSizeCtrl : MaxPacketSizeBulk;
     }
     
-    template <size_t N>
+    template<size_t N>
     constexpr inline size_t MaxPacketSizeIn(const uint8_t (&eps)[N]) {
         // Don't have IN endpoints: MPS=control transfer MPS (64)
         // Do have IN endpoints: MPS=bulk transfer MPS (512, the only value that the spec allows for HS bulk endpoints)
@@ -199,7 +199,7 @@ struct [[gnu::packed]] StringDescriptor {
     uint8_t bDescriptorType;
 };
 
-template <size_t N>
+template<size_t N>
 struct [[gnu::packed]] StringDescriptorN : StringDescriptor {
     static_assert(N <= 126, "max character count is 126 (2 string descriptor header bytes + 126 UTF-16 characters == 2 + 2*126 == 254; more than that overflows bLength)");
     uint16_t str[N] = {};
@@ -228,12 +228,12 @@ struct [[gnu::packed]] StringDescriptorN : StringDescriptor {
 
 using StringDescriptorMax = StringDescriptorN<126>;
 
-template <size_t N>
+template<size_t N>
 constexpr auto StringDescriptorMake(const char (&str)[N]) {
     return StringDescriptorN<N-1>(str);
 }
 
-template <size_t N>
+template<size_t N>
 struct [[gnu::packed]] SupportedLanguagesDescriptorN : StringDescriptor {
     uint16_t langs[N] = {};
     
@@ -245,7 +245,7 @@ struct [[gnu::packed]] SupportedLanguagesDescriptorN : StringDescriptor {
     }
 };
 
-template <size_t N>
+template<size_t N>
 constexpr auto SupportedLanguagesDescriptorMake(const uint16_t (&langs)[N]) {
     return SupportedLanguagesDescriptorN<N>(langs);
 }

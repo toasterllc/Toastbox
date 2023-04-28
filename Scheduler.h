@@ -55,7 +55,7 @@ private:
 
 // MARK: - Scheduler
 
-template <
+template<
     typename T_TickPeriod,              // T_TickPeriod: a std::ratio specifying the period between Tick()
                                         //   calls, in seconds
     
@@ -73,14 +73,26 @@ template <
     typename... T_Tasks                 // T_Tasks: list of tasks
 >
 class Scheduler {
+public:
+    using Ticks     = unsigned int;
+    using Deadline  = Ticks;
+
 private:
     using _TaskFn = void(*)();
     using _RunnableFn = bool(*)();
     
-public:
-    using Ticks     = unsigned int;
-    using Deadline  = Ticks;
+    template<auto T_Time, typename T_Unit>
+    static constexpr Ticks _Ticks() {
+        // We're intentionally not ceiling the result because Sleep() implicitly
+        // ceils by adding one tick (to prevent truncated sleeps), so if this
+        // function ceiled too, we'd always sleep one more tick than needed.
+        using TicksPerTime = std::ratio_divide<T_Unit, T_TickPeriod>;
+        const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
+        static_assert(ticks <= _TicksMax);
+        return ticks;
+    }
     
+public:
     // Run(): scheduler entry point
     // Invokes task 0's Run() function
     [[noreturn]]
@@ -91,7 +103,7 @@ public:
     }
     
     // Start(): init the task's stack
-    template <typename T_Task>
+    template<typename T_Task>
     static void Start(_TaskFn run=T_Task::Run) {
         constexpr _Task& task = _TaskGet<T_Task>();
         void*const StackEnd = (void*)((uint8_t*)T_Task::Stack + sizeof(T_Task::Stack));
@@ -99,39 +111,39 @@ public:
     }
     
     // Stop<task>(): stops `task`
-    template <typename T_Task>
+    template<typename T_Task>
     static void Stop() {
         constexpr _Task& task = _TaskGet<T_Task>();
         _TaskStop(task);
     }
     
     // Running<task>(): returns whether `task` is running
-    template <typename T_Task>
+    template<typename T_Task>
     static bool Running() {
         constexpr _Task& task = _TaskGet<T_Task>();
         return task.runnable!=_RunnableFalse || task.wakeDeadline;
     }
     
     // Start<tasks>(): starts `tasks`
-    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+    template<typename T_Task, typename T_Task2, typename... T_Tsks>
     static void Start() {
         Start<T_Task>(), Start<T_Task2>(), (Start<T_Tsks>(), ...);
     }
     
     // Stop<tasks>(): stops `tasks`
-    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+    template<typename T_Task, typename T_Task2, typename... T_Tsks>
     static void Stop() {
         Stop<T_Task>(), Stop<T_Task2>(), (Stop<T_Tsks>(), ...);
     }
     
     // Running<tasks>(): returns whether any of `tasks` are running
-    template <typename T_Task, typename T_Task2, typename... T_Tsks>
+    template<typename T_Task, typename T_Task2, typename... T_Tsks>
     static bool Running() {
         return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
     }
     
     // Wait<tasks>(): waits until none of `tasks` are running
-    template <typename... T_Tsks>
+    template<typename... T_Tsks>
     static void Wait() {
         return Wait([] { return !Running<T_Tsks...>(); });
     }
@@ -170,19 +182,19 @@ public:
     }
     
     // Context getter for current task
-    template <typename T>
+    template<typename T>
     static T Ctx() { return _TFromPtr<T>(_TaskCurr->ctx); }
     
     // Context setter for current task
-    template <typename T>
+    template<typename T>
     static void Ctx(const T& t) { _TaskCurr->ctx = _PtrFromT(t); }
     
 //    // Context getter for current task
-//    template <typename T>
+//    template<typename T>
 //    static T& CtxGet(const T& t) { return *_TFromPtr<T*>(_TaskCurr->ctx); }
 //    
 //    // Context setter for current task
-//    template <typename T>
+//    template<typename T>
 //    static void CtxSet(const T& t) { _TaskCurr->ctx = _PtrFromT(&t); }
     
     // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
@@ -325,14 +337,14 @@ private:
         _Task* next = nullptr;
     };
     
-    template <typename T>
+    template<typename T>
     static T _TFromPtr(uintptr_t x) {
         static_assert(sizeof(T) <= sizeof(uintptr_t));
         union { T t; uintptr_t ptr; } u = { .ptr = x };
         return u.t;
     }
     
-    template <typename T>
+    template<typename T>
     static uintptr_t _PtrFromT(T x) {
         static_assert(sizeof(T) <= sizeof(uintptr_t));
         union { T t; uintptr_t ptr; } u = { .t = x };
@@ -505,19 +517,8 @@ private:
         return false;
     }
     
-    template<auto T_Time, typename T_Unit>
-    static constexpr Ticks _Ticks() {
-        // We're intentionally not ceiling the result because Sleep() implicitly
-        // ceils by adding one tick (to prevent truncated sleeps), so if this
-        // function ceiled too, we'd always sleep one more tick than needed.
-        using TicksPerTime = std::ratio_divide<T_Unit, T_TickPeriod>;
-        const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
-        static_assert(ticks <= _TicksMax);
-        return ticks;
-    }
-    
     // _TaskGet(): returns the _Task& for the given T_Task
-    template <typename T_Task>
+    template<typename T_Task>
     static constexpr _TaskFn _Task0RunFn() {
         static_assert((std::is_same_v<T_Task, T_Tasks> || ...), "invalid task");
         constexpr size_t idx = _ElmIdx<T_Task, T_Tasks...>();
@@ -528,14 +529,14 @@ private:
     }
     
     // _TaskGet(): returns the _Task& for the given T_Task
-    template <typename T_Task, size_t T_Delta=0>
+    template<typename T_Task, size_t T_Delta=0>
     static constexpr _Task& _TaskGet() {
         static_assert((std::is_same_v<T_Task, T_Tasks> || ...), "invalid task");
         constexpr size_t idx = (_ElmIdx<T_Task, T_Tasks...>() + T_Delta) % std::size(_Tasks);
         return _Tasks[idx];
     }
     
-    template <typename T_1, typename T_2=void, typename... T_s>
+    template<typename T_1, typename T_2=void, typename... T_s>
     static constexpr size_t _ElmIdx() {
         return std::is_same_v<T_1,T_2> ? 0 : 1 + _ElmIdx<T_1, T_s...>();
     }
