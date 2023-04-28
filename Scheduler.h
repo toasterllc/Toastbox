@@ -227,8 +227,11 @@ public:
         return (bool)_TaskCurr->wakeDeadline;
     }
     
-    static constexpr Ticks Us(uint16_t us) { return _Ticks<std::micro>(us); }
-    static constexpr Ticks Ms(uint16_t ms) { return _Ticks<std::milli>(ms); }
+    template<auto T>
+    static constexpr Ticks Us = _Ticks<T, std::micro>();
+    
+    template<auto T>
+    static constexpr Ticks Ms = _Ticks<T, std::milli>();
     
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
@@ -502,13 +505,13 @@ private:
         return false;
     }
     
-    template<typename T_Unit>
-    static constexpr Ticks _Ticks(uint32_t time) {
+    template<auto T_Time, typename T_Unit>
+    static constexpr Ticks _Ticks() {
         // We're intentionally not ceiling the result because Sleep() implicitly
         // ceils by adding one tick (to prevent truncated sleeps), so if this
         // function ceiled too, we'd always sleep one more tick than needed.
         using TicksPerTime = std::ratio_divide<T_Unit, T_TickPeriod>;
-        constexpr auto ticks = (time * TicksPerTime::num) / TicksPerTime::den;
+        const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
         static_assert(ticks <= _TicksMax);
         return ticks;
     }
