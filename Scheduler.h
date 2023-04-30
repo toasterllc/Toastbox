@@ -311,14 +311,18 @@ public:
         return true;
     }
     
+    // TickRequired(): whether Tick() invocations are currently required, as determined by whether there
+    // are any tasks waiting for a deadline to pass.
+    // If TickRequired() returns false, Tick() invocations aren't currently needed (and therefore
+    // related hardware can be paused to save power, for example).
+    static bool TickRequired() {
+        IntState ints(false);
+        return _ISR.WakeDeadline || _ISR.WakeDeadlineUpdate;
+    }
+    
     static Ticks CurrentTime() {
         IntState ints(false);
         return _ISR.CurrentTime;
-    }
-    
-    static std::optional<Deadline> WakeDeadline() {
-        IntState ints(false);
-        return _ISR.WakeDeadline;
     }
     
 private:
