@@ -82,13 +82,28 @@ private:
     
     template<auto T_Time, typename T_Unit>
     static constexpr Ticks _Ticks() {
-        // We're intentionally not ceiling the result because Sleep() implicitly
-        // ceils by adding one tick (to prevent truncated sleeps), so if this
-        // function ceiled too, we'd always sleep one more tick than needed.
-        using TicksPerTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
-        const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
+        using TimePerTick = std::ratio_divide<T_TicksPeriod, T_Unit>;
+        // Ratio: ceiled number of ticks in `T_Time`
+        //   = (T_Time + TimePerTick - 1) / TimePerTick
+        using Ratio = std::ratio_divide<
+            std::ratio_subtract<std::ratio_add<std::ratio<T_Time>, TimePerTick>, std::ratio<1>>,
+            TimePerTick
+        >;
+        const auto ticks = Ratio::num / Ratio::den;
         static_assert(ticks <= _TicksMax);
         return ticks;
+        
+//        using TicksPerTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
+//        
+//        std::ratio<T_Time> +
+//        
+//        // We're intentionally not ceiling the result because Sleep() implicitly
+//        // ceils by adding one tick (to prevent truncated sleeps), so if this
+//        // function ceiled too, we'd always sleep one more tick than needed.
+//        using TicksPerTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
+//        const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
+//        static_assert(ticks <= _TicksMax);
+//        return ticks;
     }
     
 public:
