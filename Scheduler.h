@@ -80,30 +80,14 @@ private:
     using _TaskFn = void(*)();
     using _RunnableFn = bool(*)();
     
+    // _Ticks(): returns the ceiled number of ticks required for T_Time to pass
     template<auto T_Time, typename T_Unit>
     static constexpr Ticks _Ticks() {
-        using TimePerTick = std::ratio_divide<T_TicksPeriod, T_Unit>;
-        // Ratio: ceiled number of ticks in `T_Time`
-        //   = (T_Time + TimePerTick - 1) / TimePerTick
-        using Ratio = std::ratio_divide<
-            std::ratio_subtract<std::ratio_add<std::ratio<T_Time>, TimePerTick>, std::ratio<1>>,
-            TimePerTick
-        >;
-        const auto ticks = Ratio::num / Ratio::den;
+        using TicksPerUnitTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
+        using TicksRatio = std::ratio_multiply<std::ratio<T_Time>, TicksPerUnitTime>;
+        const auto ticks = (TicksRatio::num + TicksRatio::den - 1) / TicksRatio::den;
         static_assert(ticks <= _TicksMax);
         return ticks;
-        
-//        using TicksPerTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
-//        
-//        std::ratio<T_Time> +
-//        
-//        // We're intentionally not ceiling the result because Sleep() implicitly
-//        // ceils by adding one tick (to prevent truncated sleeps), so if this
-//        // function ceiled too, we'd always sleep one more tick than needed.
-//        using TicksPerTime = std::ratio_divide<T_Unit, T_TicksPeriod>;
-//        const auto ticks = (T_Time * TicksPerTime::num) / TicksPerTime::den;
-//        static_assert(ticks <= _TicksMax);
-//        return ticks;
     }
     
 public:
@@ -192,8 +176,7 @@ public:
     static bool Wait(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
         if (fn()) return true;
-        const Deadline deadline = _ISR.CurrentTime+ticks;
-        _TaskSwap(fn, deadline);
+        _TaskSwap(fn, _DeadlineForTicks(ticks));
         return (bool)_TaskCurr->wakeDeadline;
     }
     
@@ -205,20 +188,12 @@ public:
     template<typename T>
     static void Ctx(const T& t) { _TaskCurr->ctx = _PtrFromT(t); }
     
-//    // Context getter for current task
-//    template<typename T>
-//    static T& CtxGet(const T& t) { return *_TFromPtr<T*>(_TaskCurr->ctx); }
-//    
-//    // Context setter for current task
-//    template<typename T>
-//    static void CtxSet(const T& t) { _TaskCurr->ctx = _PtrFromT(&t); }
-    
     // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
     //
     // For a deadline to be considered in the past, it must be in the range:
-    //   [CurrentTime-TicksMax/2-1, CurrentTime-1]
+    //   [CurrentTime-TicksMax/2, CurrentTime]
     // For a deadline to be considered in the future, it must be in the range:
-    //   [CurrentTime, CurrentTime+TicksMax/2]
+    //   [CurrentTime+1, CurrentTime+TicksMax/2+1]
     //
     // where TicksMax is the maximum value that the `Ticks` type can hold.
     //
@@ -242,13 +217,13 @@ public:
         // heuristic:
         //
         // For a deadline to be considered in the past, it must be in the range:
-        //   [CurrentTime-TicksMax/2-1, CurrentTime-1]
+        //   [CurrentTime-TicksMax/2, CurrentTime]
         // For a deadline to be considered in the future, it must be in the range:
-        //   [CurrentTime, CurrentTime+TicksMax/2]
+        //   [CurrentTime+1, CurrentTime+TicksMax/2+1]
         //
         // Now that ints are disabled (and therefore _ISR.CurrentTime is unchanging), we
         // can employ the above heuristic to determine whether `deadline` has already passed.
-        const bool past = deadline-_ISR.CurrentTime > _TicksMax/2;
+        const bool past = deadline-_ISR.CurrentTime-1 > _TicksMax/2;
         if (past) return false;
         if (fn()) return true;
         _TaskSwap(fn, deadline);
@@ -264,39 +239,29 @@ public:
     // Sleep(ticks): sleep current task for `ticks`
     static void Sleep(Ticks ticks) {
         IntState ints(false);
-        const Deadline deadline = _ISR.CurrentTime+ticks;
-        _TaskSwap(_RunnableFalse, deadline);
+        _TaskSwap(_RunnableFalse, _DeadlineForTicks(ticks));
     }
     
     // Delay(ticks): delay current task for `ticks` without allowing other tasks to run
     // Enables interrupts at least once.
     static void Delay(Ticks ticks) {
         IntState ints(false);
-        const Deadline deadline = _ISR.CurrentTime+ticks;
-        _TaskCurr->wakeDeadline = deadline;
+        _TaskCurr->wakeDeadline = _DeadlineForTicks(ticks);
         _ISR.WakeDeadlineUpdate = true;
         
-        while (_TaskCurr->wakeDeadline) {
+        do {
             T_Sleep();
             // Let interrupts fire after waking
             IntState ints(true);
-        }
+        } while (_TaskCurr->wakeDeadline);
     }
     
     // Tick(): notify scheduler that a tick has passed
     // Returns whether the CPU should wake to allow the scheduler to run
     static bool Tick() {
+        _ISR.CurrentTime++;
+        
         // Wake tasks matching the current tick.
-        // We wake tasks for deadline `N` only when updating CurrentTime to
-        // `N+1`, as this signifies that the full tick for `N` has elapsed.
-        //
-        // Put another way, we increment CurrentTime _after_ checking for
-        // tasks matching `CurrentTime`.
-        //
-        // Put another-another way, Sleep() assigns the tasks'
-        // wakeDeadline to CurrentTime+ticks (not CurrentTime+ticks+1), and
-        // our logic here matches that math to ensure that we sleep at
-        // least `ticks`.
         if (_ISR.WakeDeadlineUpdate || (_ISR.WakeDeadline && *_ISR.WakeDeadline==_ISR.CurrentTime)) {
             // Wake the necessary tasks, and update _ISR.WakeDeadline
             Ticks wakeDelay = _TicksMax;
@@ -321,8 +286,6 @@ public:
             _ISR.WakeDeadline = wakeDeadline;
             _ISR.WakeDeadlineUpdate = false;
         }
-        
-        _ISR.CurrentTime++;
         return true;
     }
     
@@ -356,6 +319,16 @@ private:
         _StackGuard* stackGuard = nullptr;
         _Task* next = nullptr;
     };
+    
+    // _DeadlineForTicks: returns the deadline for `ticks` in the future
+    // We add 1 to account for the remainder of time left until the next tick arrives,
+    // which is anywhere between [0,1) ticks. Ie the +1 has the effect of 'burning off'
+    // this remainder time, so we can safely add `ticks` to that result, and guarantee
+    // that we get a deadline that's at least `ticks` in the future.
+    // Ints must be disabled
+    static Deadline _DeadlineForTicks(Ticks ticks) {
+        return _ISR.CurrentTime+ticks+1;
+    }
     
     template<typename T>
     static T _TFromPtr(uintptr_t x) {
