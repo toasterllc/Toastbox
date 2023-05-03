@@ -21,10 +21,12 @@ public:
     static bool Get();
     static void Set(bool en);
     
+    [[gnu::always_inline]]
     IntState() {
         _prev = Get();
     }
     
+    [[gnu::always_inline]]
     IntState(bool en) {
         _prev = Get();
         Set(en);
@@ -33,18 +35,22 @@ public:
     IntState(const IntState& x) = delete;
     IntState(IntState&& x)      = delete;
     
+    [[gnu::always_inline]]
     ~IntState() {
         Set(_prev);
     }
     
+    [[gnu::always_inline]]
     void enable() {
         Set(true);
     }
     
+    [[gnu::always_inline]]
     void disable() {
         Set(false);
     }
     
+    [[gnu::always_inline]]
     void restore() {
         Set(_prev);
     }
