@@ -154,8 +154,8 @@ public:
         return (((_TaskGet<T_Task>().runnable!=_RunnableFalse || _TaskGet<T_Task>().wakeDeadline) || ...));
     }
     
-    // Wait<tasks>(): waits until none of `tasks` are running
-    template<typename... T_Tsks>
+    // Wait(): waits until none of T_Tasks are running
+    template<typename... T_Task>
     static void Wait() {
         return Wait([] { return !Running<T_Tsks...>(); });
     }
