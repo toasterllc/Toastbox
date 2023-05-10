@@ -108,45 +108,68 @@ public:
         for (;;);
     }
     
-    // Start(): init the task's stack
     template<typename T_Task>
-    static void Start(_TaskFn run=T_Task::Run) {
-        constexpr _Task& task = _TaskGet<T_Task>();
-        void*const StackEnd = (void*)((uint8_t*)T_Task::Stack + sizeof(T_Task::Stack));
-        _TaskStart(task, run, StackEnd);
+    static constexpr void* _StackEnd() {
+        return (void*)((uint8_t*)T_Task::Stack + sizeof(T_Task::Stack));
     }
     
-    // Stop<task>(): stops `task`
-    template<typename T_Task>
-    static void Stop() {
-        constexpr _Task& task = _TaskGet<T_Task>();
-        _TaskStop(task);
+    // Current(): returns whether any of T_Tasks are the currently-running task
+    template<typename... T_Task>
+    static bool Current() {
+        return ((((_TaskCurr == &_TaskGet<T_Task>()) || ...)));
     }
     
-    // Running<task>(): returns whether `task` is running
+    // Start(): start running T_Task with a specified function
     template<typename T_Task>
-    static bool Running() {
-        constexpr _Task& task = _TaskGet<T_Task>();
-        return task.runnable!=_RunnableFalse || task.wakeDeadline;
+    static void Start(_TaskFn run) {
+        _TaskStart(_TaskGet<T_Task>(), run, _StackEnd<T_Task>());
     }
     
-    // Start<tasks>(): starts `tasks`
-    template<typename T_Task, typename T_Task2, typename... T_Tsks>
+    // Start(): start running T_Tasks with their respective Run() functions
+    template<typename... T_Task>
     static void Start() {
-        Start<T_Task>(), Start<T_Task2>(), (Start<T_Tsks>(), ...);
+        ((_TaskStart(_TaskGet<T_Task>(), T_Task::Run, _StackEnd<T_Task>()), ...));
     }
     
-    // Stop<tasks>(): stops `tasks`
-    template<typename T_Task, typename T_Task2, typename... T_Tsks>
+    // Stop(): stop T_Tasks
+    template<typename... T_Task>
     static void Stop() {
-        Stop<T_Task>(), Stop<T_Task2>(), (Stop<T_Tsks>(), ...);
+        ((_TaskStop(_TaskGet<T_Task>()), ...));
     }
     
-    // Running<tasks>(): returns whether any of `tasks` are running
-    template<typename T_Task, typename T_Task2, typename... T_Tsks>
-    static bool Running() {
-        return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
+    // Abort(): the same as Stop(), except if one of `T_Tasks` is the current task, immediately returns the scheduler
+    template<typename... T_Task>
+    static void Abort() {
+        ((_TaskStop(_TaskGet<T_Task>()), ...));
+        if (Current<T_Task...>()) {
+            // We stopped the current task so return to the scheduler
+            _TaskSwap(_RunnableFalse);
+        }
     }
+    
+    // Running(): returns whether any T_Tasks are running
+    template<typename... T_Task>
+    static bool Running() {
+        return (((_TaskGet<T_Task>().runnable!=_RunnableFalse || _TaskGet<T_Task>().wakeDeadline) || ...));
+    }
+    
+//    // Start<tasks>(): starts `tasks`
+//    template<typename T_Task, typename T_Task2, typename... T_Tsks>
+//    static void Start() {
+//        Start<T_Task>(), Start<T_Task2>(), (Start<T_Tsks>(), ...);
+//    }
+//    
+//    // Stop<tasks>(): stops `tasks`
+//    template<typename T_Task, typename T_Task2, typename... T_Tsks>
+//    static void Stop() {
+//        Stop<T_Task>(), Stop<T_Task2>(), (Stop<T_Tsks>(), ...);
+//    }
+//    
+//    // Running<tasks>(): returns whether any of `tasks` are running
+//    template<typename T_Task, typename T_Task2, typename... T_Tsks>
+//    static bool Running() {
+//        return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
+//    }
     
     // Wait<tasks>(): waits until none of `tasks` are running
     template<typename... T_Tsks>
