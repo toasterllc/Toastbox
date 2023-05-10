@@ -132,6 +132,7 @@ public:
     }
     
     // Stop(): stop T_Tasks
+    // This explicitly does not affect the current task; see Abort() for that behavior.
     template<typename... T_Task>
     static void Stop() {
         ((_TaskStop(_TaskGet<T_Task>()), ...));
@@ -152,24 +153,6 @@ public:
     static bool Running() {
         return (((_TaskGet<T_Task>().runnable!=_RunnableFalse || _TaskGet<T_Task>().wakeDeadline) || ...));
     }
-    
-//    // Start<tasks>(): starts `tasks`
-//    template<typename T_Task, typename T_Task2, typename... T_Tsks>
-//    static void Start() {
-//        Start<T_Task>(), Start<T_Task2>(), (Start<T_Tsks>(), ...);
-//    }
-//    
-//    // Stop<tasks>(): stops `tasks`
-//    template<typename T_Task, typename T_Task2, typename... T_Tsks>
-//    static void Stop() {
-//        Stop<T_Task>(), Stop<T_Task2>(), (Stop<T_Tsks>(), ...);
-//    }
-//    
-//    // Running<tasks>(): returns whether any of `tasks` are running
-//    template<typename T_Task, typename T_Task2, typename... T_Tsks>
-//    static bool Running() {
-//        return Running<T_Task>() || Running<T_Task2>() || (Running<T_Tsks>() || ...);
-//    }
     
     // Wait<tasks>(): waits until none of `tasks` are running
     template<typename... T_Tsks>
