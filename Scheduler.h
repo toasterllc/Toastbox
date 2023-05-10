@@ -157,7 +157,7 @@ public:
     // Wait(): waits until none of T_Tasks are running
     template<typename... T_Task>
     static void Wait() {
-        return Wait([] { return !Running<T_Tsks...>(); });
+        return Wait([] { return !Running<T_Task...>(); });
     }
     
     // Yield(): yield current task to the scheduler
