@@ -120,27 +120,43 @@ public:
     }
     
     // Start(): start running T_Task with a specified function
+    //
+    // Interrupt context: allowed
     template<typename T_Task>
     static void Start(_TaskFn run) {
+        // Disable ints (because _TaskStart requires it)
+        IntState ints(false);
         _TaskStart(_TaskGet<T_Task>(), run, _StackEnd<T_Task>());
     }
     
     // Start(): start running T_Tasks with their respective Run() functions
+    //
+    // Interrupt context: allowed
     template<typename... T_Task>
     static void Start() {
+        // Disable ints (because _TaskStart requires it)
+        IntState ints(false);
         ((_TaskStart(_TaskGet<T_Task>(), T_Task::Run, _StackEnd<T_Task>()), ...));
     }
     
     // Stop(): stop T_Tasks
     // This explicitly does not affect the current task; see Abort() for that behavior.
+    //
+    // Interrupt context: allowed
     template<typename... T_Task>
     static void Stop() {
+        // Disable ints (because _TaskStop requires it)
+        IntState ints(false);
         ((_TaskStop(_TaskGet<T_Task>()), ...));
     }
     
     // Abort(): the same as Stop(), except if one of `T_Tasks` is the current task, immediately returns the scheduler
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     template<typename... T_Task>
     static void Abort() {
+        // Disable ints (because _TaskStop / _TaskSwap require it)
+        IntState ints(false);
         ((_TaskStop(_TaskGet<T_Task>()), ...));
         if (Current<T_Task...>()) {
             // We stopped the current task so return to the scheduler
@@ -149,18 +165,26 @@ public:
     }
     
     // Running(): returns whether any T_Tasks are running
+    //
+    // Interrupt context: allowed
     template<typename... T_Task>
     static bool Running() {
+        // Disable ints (because we're accessing the same fields as Tick())
+        IntState ints(false);
         return (((_TaskGet<T_Task>().runnable!=_RunnableFalse || _TaskGet<T_Task>().wakeDeadline) || ...));
     }
     
     // Wait(): waits until none of T_Tasks are running
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     template<typename... T_Task>
     static void Wait() {
         return Wait([] { return !Running<T_Task...>(); });
     }
     
     // Yield(): yield current task to the scheduler
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     static void Yield() {
         IntState ints(false);
         _TaskSwap(_RunnableTrue);
@@ -177,6 +201,8 @@ public:
     // after Wait() returns.
     //
     // Ints are disabled while calling `fn`
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     static void Wait(_RunnableFn fn) {
         IntState ints(false);
         if (fn()) return;
@@ -185,6 +211,8 @@ public:
     
     // Wait(): sleep current task until `fn` returns true, or `ticks` to pass.
     // See Wait() function above for more info.
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     static bool Wait(Ticks ticks, _RunnableFn fn) {
         IntState ints(false);
         if (fn()) return true;
@@ -212,6 +240,8 @@ public:
     // See comment in function body for more info regarding the deadline parameter.
     //
     // See Wait() function above for more info.
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     static bool WaitDeadline(Deadline deadline, _RunnableFn fn) {
         IntState ints(false);
         
@@ -249,6 +279,8 @@ public:
     static constexpr Ticks Ms = _Ticks<T, std::milli>();
     
     // Sleep(ticks): sleep current task for `ticks`
+    //
+    // Interrupt context: not allowed (because it enters the scheduler)
     static void Sleep(Ticks ticks) {
         IntState ints(false);
         _TaskSwap(_RunnableFalse, _DeadlineForTicks(ticks));
@@ -256,6 +288,8 @@ public:
     
     // Delay(ticks): delay current task for `ticks` without allowing other tasks to run
     // Enables interrupts at least once.
+    //
+    // Interrupt context: not allowed (because it calls T_Sleep)
     static void Delay(Ticks ticks) {
         IntState ints(false);
         _TaskCurr->wakeDeadline = _DeadlineForTicks(ticks);
@@ -269,11 +303,16 @@ public:
     }
     
     // Tick(): notify scheduler that a tick has passed
-    // Returns whether the CPU should wake to allow the scheduler to run
+    // Returns whether the CPU should wake to allow the scheduler to run.
+    //
+    // Interrupt context: can only be called from the interrupt context;
+    // Tick() is intended to be called from an ISR that fires with period
+    // `T_TicksPeriod`.
     static bool Tick() {
         _ISR.CurrentTime++;
         
         // Wake tasks matching the current tick.
+        bool wake = false;
         if (_ISR.WakeDeadlineUpdate || (_ISR.WakeDeadline && *_ISR.WakeDeadline==_ISR.CurrentTime)) {
             // Wake the necessary tasks, and update _ISR.WakeDeadline
             Ticks wakeDelay = _TicksMax;
@@ -284,6 +323,7 @@ public:
                     // The task's deadline has been hit; wake it
                     task.runnable = _RunnableTrue;
                     task.wakeDeadline = std::nullopt;
+                    wake = true;
                 
                 } else {
                     // The task's deadline has not been hit; consider it as a candidate for the next _ISR.WakeDeadline
@@ -298,18 +338,28 @@ public:
             _ISR.WakeDeadline = wakeDeadline;
             _ISR.WakeDeadlineUpdate = false;
         }
-        return true;
+        
+        return wake;
     }
     
     // TickRequired(): whether Tick() invocations are currently required, as determined by whether there
     // are any tasks waiting for a deadline to pass.
     // If TickRequired() returns false, Tick() invocations aren't currently needed (and therefore
     // related hardware can be paused to save power, for example).
+    //
+    // Interrupt context: allowed
     static bool TickRequired() {
         IntState ints(false);
         return _ISR.WakeDeadline || _ISR.WakeDeadlineUpdate;
     }
     
+    // CurrentTime(): returns the current time in ticks
+    //
+    // Note that this value only changes due to Tick() being called. Therefore if Tick() isn't
+    // called because TickRequired()==false, then CurrentTime() won't be incremented until
+    // TickRequired()==true.
+    //
+    // Interrupt context: allowed
     static Ticks CurrentTime() {
         IntState ints(false);
         return _ISR.CurrentTime;
@@ -337,7 +387,8 @@ private:
     // which is anywhere between [0,1) ticks. Ie the +1 has the effect of 'burning off'
     // this remainder time, so we can safely add `ticks` to that result, and guarantee
     // that we get a deadline that's at least `ticks` in the future.
-    // Ints must be disabled
+    //
+    // Ints: disabled (because we're accessing the same fields as Tick())
     static Deadline _DeadlineForTicks(Ticks ticks) {
         return _ISR.CurrentTime+ticks+1;
     }
@@ -447,6 +498,9 @@ private:
         }
     }
     
+    // _TaskStart(): reset a task to run a particular function
+    //
+    // Ints: disabled (because we're accessing the same fields as Tick())
     [[gnu::noinline]]
     static void _TaskStart(_Task& task, _TaskFn run, void* sp) {
         constexpr size_t SaveRegCount = _SchedulerStackSaveRegCount+1;
@@ -465,6 +519,9 @@ private:
         *(stackEnd-ExtraRegCount-1) = (void*)_TaskRun;
     }
     
+    // _TaskStop(): reset a task to be stopped
+    //
+    // Ints: disabled (because we're accessing the same fields as Tick())
     [[gnu::noinline]]
     static void _TaskStop(_Task& task) {
         // Make task !runnable
@@ -473,15 +530,24 @@ private:
         task.wakeDeadline = std::nullopt;
     }
     
+    // _TaskRun(): task entry point
+    //
+    // Ints: don't care
     static void _TaskRun() {
         // Enable interrupts before entering the task for the first time
         IntState::Set(true);
         // Enter the task
         _TaskCurr->run();
+        // Disable interrupts when returning to the scheduler after the task exits
+        IntState::Set(false);
         // Next task
         _TaskSwap(_RunnableFalse);
     }
     
+    // _TaskNext(): sets _TaskCurr to the next runnable task
+    // Return `true` if we found a different task, or `false` if it's the same task that's currently running
+    //
+    // Ints: disabled
     static bool _TaskNext() {
         _TaskPrev = _TaskCurr;
         for (;;) {
@@ -492,7 +558,8 @@ private:
     }
     
     // _TaskSwap(): saves _TaskCurr and restores the next runnable task
-    // Ints must be disabled
+    //
+    // Ints: disabled
     [[gnu::noinline]]
     static void _TaskSwap(_RunnableFn fn, std::optional<Deadline> wake=std::nullopt) {
         // Check stack guards
