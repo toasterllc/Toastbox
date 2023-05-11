@@ -1,4 +1,5 @@
 #pragma once
+#include <limits>
 
 #define _Concat(x, y) x ## y
 #define Concat(x, y) _Concat(x, y)
