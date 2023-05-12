@@ -229,6 +229,7 @@ public:
     static void Ctx(const T& t) { _TaskCurr->ctx = _PtrFromT(t); }
     
     // WaitDeadline(): wait for a condition to become true, or for a deadline to pass.
+    // Returns true if the condition became true before the deadline.
     //
     // For a deadline to be considered in the past, it must be in the range:
     //   [CurrentTime-TicksMax/2, CurrentTime]
