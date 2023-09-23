@@ -16,10 +16,25 @@ public:
         });
     }
     
+    template<typename T_Duration, typename T_Cond>
+    void wait_for(std::unique_lock<std::mutex>& lock, T_Duration dur, T_Cond cond) {
+        _cv.wait_for(lock, dur, [&] {
+            if (_stop) throw Stop();
+            return cond();
+        });
+    }
+    
     template<typename T_Cond>
     auto wait(T_Cond cond) {
         auto l = std::unique_lock(_lock);
         wait(l, cond);
+        return l;
+    }
+    
+    template<typename T_Duration, typename T_Cond>
+    auto wait_for(T_Duration dur, T_Cond cond) {
+        auto l = std::unique_lock(_lock);
+        wait_for(l, dur, cond);
         return l;
     }
     
