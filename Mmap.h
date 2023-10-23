@@ -60,6 +60,7 @@ public:
     
     void sync() const {
         if (!_state.data) throw RuntimeError("invalid state");
+        if (!_state.len) return; // Short-circuit if there's nothing to sync
         int ir = msync(_state.data, _state.len, MS_SYNC);
         if (ir) throw RuntimeError("msync failed: %s", strerror(errno));
     }
