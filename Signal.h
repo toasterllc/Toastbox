@@ -47,10 +47,10 @@ public:
     void signalOne() { _cv.notify_one(); }
     void signalAll() { _cv.notify_all(); }
     
-    void stop() {
+    void stop(bool x=true) {
         {
             auto l = std::unique_lock(_lock);
-            _stop = true;
+            _stop = x;
         }
         _cv.notify_all();
     }
