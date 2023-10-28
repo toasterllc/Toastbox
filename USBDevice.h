@@ -22,6 +22,7 @@
 
 namespace Toastbox {
 
+struct USBDevice; using USBDevicePtr = std::unique_ptr<USBDevice>;
 class USBDevice {
 public:
     using Milliseconds = std::chrono::milliseconds;
@@ -156,8 +157,8 @@ public:
     USBDevice& operator=(USBDevice&& x) = default;
     
 #if __APPLE__
-    static std::vector<USBDevice> GetDevices() {
-        std::vector<USBDevice> devices;
+    static std::vector<USBDevicePtr> GetDevices() {
+        std::vector<USBDevicePtr> devices;
         io_iterator_t ioServicesIter = MACH_PORT_NULL;
         kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, IOServiceMatching(kIOUSBDeviceClassName), &ioServicesIter);
         if (kr != KERN_SUCCESS) throw RuntimeError("IOServiceGetMatchingServices failed: 0x%x", kr);
@@ -167,7 +168,7 @@ public:
             SendRight service(SendRight::NoRetain, IOIteratorNext(servicesIter));
             if (!service.valid()) break;
             // Ignore devices that we fail to create a USBDevice for
-            try { devices.emplace_back(service); }
+            try { devices.emplace_back(std::make_unique<USBDevice>(service)); }
             catch (...) {}
         }
         return devices;

@@ -47,12 +47,14 @@ public:
     void signalOne() { _cv.notify_one(); }
     void signalAll() { _cv.notify_all(); }
     
-    void stop(bool x=true) {
-        {
-            auto l = std::unique_lock(_lock);
-            _stop = x;
-        }
+    void stop(const std::unique_lock<std::mutex>& lock, bool x=true) {
+        assert((bool)lock);
+        _stop = x;
         _cv.notify_all();
+    }
+    
+    void stop(bool x=true) {
+        stop(std::unique_lock(_lock), x);
     }
     
 private:
