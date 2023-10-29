@@ -71,7 +71,8 @@ void T_Sleep(),                     // T_Sleep: sleep function; invoked when no 
                                     //   interrupts are disabled upon return from T_Sleep().
 
 size_t T_StackGuardCount,           // T_StackGuardCount: number of pointer-sized stack guard elements to use
-void T_StackOverflow(),             // T_StackOverflow: function to call when stack overflow is detected
+void T_StackOverflow(size_t),       // T_StackOverflow: function to call when stack overflow is detected;
+                                    //   argument is the task index (in T_Tasks) with the corrupted stack.
 auto T_StackInterrupt,              // T_StackInterrupt: interrupt stack pointer (only used to monitor
                                     //   interrupt stack for overflow; unused if T_StackGuardCount==0)
 
@@ -494,7 +495,7 @@ private:
     static void _StackGuardCheck(const _StackGuard& guard) {
         for (const uintptr_t& x : guard) {
             if (x != _StackGuardMagicNumber) {
-                T_StackOverflow();
+                T_StackOverflow(_TaskCurr - &_Tasks[0]);
             }
         }
     }
