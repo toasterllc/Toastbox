@@ -664,19 +664,19 @@ public:
         return epInfo.maxPacketSize;
     }
     
-    std::string manufacturer() {
+    std::string manufacturer() const {
         return stringDescriptor(deviceDescriptor().iManufacturer).asciiString();
     }
     
-    std::string product() {
+    std::string product() const {
         return stringDescriptor(deviceDescriptor().iProduct).asciiString();
     }
     
-    std::string serialNumber() {
+    std::string serialNumber() const {
         return stringDescriptor(deviceDescriptor().iSerialNumber).asciiString();
     }
     
-    std::vector<uint8_t> endpoints() {
+    std::vector<uint8_t> endpoints() const {
         std::vector<uint8_t> eps;
         for (const _EndpointInfo& epInfo : _epInfos) {
             if (epInfo.valid) {
