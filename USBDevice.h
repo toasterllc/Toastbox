@@ -368,17 +368,30 @@ public:
     }
     
     void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
-        IOUSBDevRequestTO usbReq = {
-            .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
-            .bRequest           = req,
-            .pData              = (void*)data,
-            .wLength            = (uint16_t)len,
-            .noDataTimeout      = (uint32_t)0,
-            .completionTimeout  = (uint32_t)timeout.count(),
-        };
+        if (timeout == Forever) {
+            IOUSBDevRequest usbReq = {
+                .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
+                .bRequest           = req,
+                .pData              = (void*)data,
+                .wLength            = (uint16_t)len,
+            };
+            
+            IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
+            _CheckErr(ior, "DeviceRequest failed");
         
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequestTO>(&usbReq);
-        _CheckErr(ior, "DeviceRequestTO failed");
+        } else {
+            IOUSBDevRequestTO usbReq = {
+                .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
+                .bRequest           = req,
+                .pData              = (void*)data,
+                .wLength            = (uint16_t)len,
+                .noDataTimeout      = (uint32_t)0,
+                .completionTimeout  = (uint32_t)timeout.count()
+            };
+            
+            IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequestTO>(&usbReq);
+            _CheckErr(ior, "DeviceRequestTO failed");
+        }
     }
     
     const SendRight& service() const { return _service; }
