@@ -341,6 +341,22 @@ public:
         return desc;
     }
     
+    void debugGetStatus() const {
+        uint8_t status[2];
+        
+        IOUSBDevRequest req = {
+            .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
+            .bRequest       = kUSBRqGetStatus,
+            .wValue         = 0,
+            .wIndex         = 0,
+            .wLength        = 2,
+            .pData          = status,
+        };
+        
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
+        _CheckErr(ior, "DeviceRequest failed");
+    }
+    
     template<typename... T_Args>
     auto read(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
