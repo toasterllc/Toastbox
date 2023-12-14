@@ -342,15 +342,13 @@ public:
     }
     
     void debugGetStatus() const {
-        uint8_t status[2];
-        
         IOUSBDevRequest req = {
-            .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
-            .bRequest       = kUSBRqGetStatus,
-            .wValue         = 0,
+            .bmRequestType  = USBmakebmRequestType(kUSBOut, kUSBStandard, kUSBDevice),
+            .bRequest       = kUSBRqClearFeature,
+            .wValue         = kUSBFeatureDeviceRemoteWakeup,
             .wIndex         = 0,
-            .wLength        = 2,
-            .pData          = status,
+            .wLength        = 0,
+            .pData          = nullptr,
         };
         
         IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
