@@ -95,6 +95,9 @@ constexpr bool in_range( T t ) noexcept
 namespace Toastbox {
 
 template<typename...>
-static constexpr std::false_type AlwaysFalse = {};
+static constexpr std::false_type AlwaysFalse_t = {};
+
+template<auto...>
+static constexpr std::false_type AlwaysFalse_v = {};
 
 } // namespace Toastbox
