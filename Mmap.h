@@ -31,14 +31,14 @@ public:
     
     Mmap() {}
     
-    Mmap(FileDescriptor&& fd, std::optional<size_t> cap=std::nullopt, int flags=MAP_PRIVATE) {
-        _init(std::move(fd), cap, flags);
+    Mmap(FileDescriptor&& fd, std::optional<size_t> cap=std::nullopt, int oflags=O_RDONLY) {
+        _init(std::move(fd), cap, oflags);
     }
     
-    Mmap(const std::filesystem::path& path, std::optional<size_t> cap=std::nullopt, int flags=MAP_PRIVATE) {
-        int fd = open(path.c_str(), O_RDWR);
+    Mmap(const std::filesystem::path& path, std::optional<size_t> cap=std::nullopt, int oflags=O_RDONLY) {
+        int fd = open(path.c_str(), oflags);
         if (fd < 0) throw RuntimeError("open failed: %s", strerror(errno));
-        _init(fd, cap, flags);
+        _init(fd, cap, oflags);
     }
     
     // Copy: deleted
@@ -102,7 +102,8 @@ public:
         if (_state.len > lenPrev) {
             const size_t begin = PageFloor(lenPrev);
             const size_t end   = PageCeil(_state.len);
-            void* data = mmap(_state.data+begin, end-begin, _MmapProtection, _state.flags|MAP_FIXED, _state.fd, begin);
+            void* data = mmap(_state.data+begin, end-begin, _MmapProtection(_state.oflags),
+                _MmapFlags(_state.oflags)|MAP_FIXED, _state.fd, begin);
             if (data == MAP_FAILED) throw RuntimeError("mmap failed: %s", strerror(errno));
         }
     }
@@ -110,13 +111,29 @@ public:
     size_t cap() const { return _state.cap; }
     
 private:
-    static constexpr int _MmapProtection = PROT_READ|PROT_WRITE;
+    static constexpr int _MmapProtection(int oflags) {
+        switch (oflags & O_ACCMODE) {
+        case O_RDONLY:  return PROT_READ;
+        case O_WRONLY:
+        case O_RDWR:    return PROT_READ|PROT_WRITE;
+        default:        abort();
+        }
+    }
     
-    void _init(FileDescriptor&& fd, std::optional<size_t> cap, int flags) {
+    static constexpr int _MmapFlags(int oflags) {
+        switch (oflags & O_ACCMODE) {
+        case O_RDONLY:  return MAP_PRIVATE;
+        case O_WRONLY:
+        case O_RDWR:    return MAP_SHARED;
+        default:        abort();
+        }
+    }
+    
+    void _init(FileDescriptor&& fd, std::optional<size_t> cap, int oflags) {
         assert(!cap || *cap==PageCeil(*cap));
         
         _state.fd = std::move(fd);
-        _state.flags = flags;
+        _state.oflags = oflags;
         
         // Determine file size
         struct stat st;
@@ -135,14 +152,14 @@ private:
             _state.cap = *cap;
         }
         
-        void* data = mmap(nullptr, _state.cap, _MmapProtection, _state.flags, _state.fd, 0);
+        void* data = mmap(nullptr, _state.cap, _MmapProtection(_state.oflags), _MmapFlags(_state.oflags), _state.fd, 0);
         if (data == MAP_FAILED) throw RuntimeError("mmap failed: %s", strerror(errno));
         _state.data = (uint8_t*)data;
     }
     
     struct {
         FileDescriptor fd;
-        int flags = 0;
+        int oflags = 0;
         uint8_t* data = nullptr;
         size_t len = 0;
         size_t cap = 0;
