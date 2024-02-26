@@ -31,7 +31,7 @@ static T IntForStr(std::string_view s, uint8_t base=10) {
 
 template<typename T>
 static void IntForStr(T& i, std::string_view s, uint8_t base=10) {
-    i = IntForStr<T>(s);
+    i = IntForStr<T>(s, base);
 }
 
 template<typename T>
