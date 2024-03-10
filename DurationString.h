@@ -4,7 +4,8 @@
 
 namespace Toastbox {
 
-inline std::string DurationString(bool ab, std::chrono::seconds sec) {
+template<typename T_Duration>
+std::string DurationString(bool ab, T_Duration sec) {
     using namespace std::chrono;
     using namespace std::string_literals;
     
