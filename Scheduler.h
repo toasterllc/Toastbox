@@ -17,9 +17,27 @@ namespace Toastbox {
 // MARK: - IntState
 class IntState {
 public:
-    // Functions provided by client
-    static bool Get();
-    static void Set(bool en);
+    static bool Get() {
+#if defined(__MSP430__)
+        return __get_SR_register() & GIE;
+#elif defined(__arm__)
+        return !__get_PRIMASK();
+#else
+        #error Task: Unsupported architecture
+#endif
+    }
+    
+    static void Set(bool en) {
+#if defined(__MSP430__)
+        if (en) __bis_SR_register(GIE);
+        else    __bic_SR_register(GIE);
+#elif defined(__arm__)
+        if (en) __enable_irq();
+        else __disable_irq();
+#else
+        #error Task: Unsupported architecture
+#endif
+    }
     
     [[gnu::always_inline]]
     IntState() {
