@@ -21,7 +21,9 @@ public:
 #if defined(__MSP430__)
         return __get_SR_register() & GIE;
 #elif defined(__arm__)
-        return !__get_PRIMASK();
+        uint32_t x;
+        asm volatile("mrs %0, primask" : "=r" (x) : : );
+        return !x;
 #else
         #error Task: Unsupported architecture
 #endif
@@ -32,8 +34,8 @@ public:
         if (en) __bis_SR_register(GIE);
         else    __bic_SR_register(GIE);
 #elif defined(__arm__)
-        if (en) __enable_irq();
-        else __disable_irq();
+        if (en) asm volatile("cpsie i" : : : "memory");
+        else    asm volatile("cpsid i" : : : "memory");
 #else
         #error Task: Unsupported architecture
 #endif
