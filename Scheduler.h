@@ -229,6 +229,8 @@ public:
     }
     
     // Wait(): sleep current task until `fn` returns true, or `ticks` to pass.
+    // Return true if `fn` caused Wait() to return, and false if the timeout elapsed.
+    //
     // See Wait() function above for more info.
     //
     // Interrupt context: not allowed (because it enters the scheduler)
