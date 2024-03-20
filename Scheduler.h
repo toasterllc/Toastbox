@@ -448,26 +448,6 @@ private:
         asm volatile("str sp, %0" : "=m" (_TaskPrev->sp) : : );         // (2)
         asm volatile("ldr sp, %0" : : "m" (_TaskCurr->sp) : );          // (3)
         asm volatile("pop {r4-r11,pc}" : : : );                         // (4)
-#elif defined(__x86_64__)
-        // AMD64
-        static_assert(sizeof(void*) == 8);
-        #define _SchedulerStackAlign            2   // Count of pointer-sized registers to which the stack needs to be aligned
-        #define _SchedulerStackSaveRegCount     6   // Count of pointer-sized registers that we save below (excluding $PC)
-        asm volatile("push %%rbx" : : : );                              // (1)
-        asm volatile("push %%rbp" : : : );                              // (1)
-        asm volatile("push %%r12" : : : );                              // (1)
-        asm volatile("push %%r13" : : : );                              // (1)
-        asm volatile("push %%r14" : : : );                              // (1)
-        asm volatile("push %%r15" : : : );                              // (1)
-        asm volatile("mov %%rsp, %0" : "=m" (_TaskPrev->sp) : : );      // (2)
-        asm volatile("mov %0, %%rsp" : : "m" (_TaskCurr->sp) : );       // (3)
-        asm volatile("pop %%r15" : : : );                               // (4)
-        asm volatile("pop %%r14" : : : );                               // (4)
-        asm volatile("pop %%r13" : : : );                               // (4)
-        asm volatile("pop %%r12" : : : );                               // (4)
-        asm volatile("pop %%rbp" : : : );                               // (4)
-        asm volatile("pop %%rbx" : : : );                               // (4)
-        asm volatile("ret" : : : );                                     // (5)
 #else
         #error Task: Unsupported architecture
 #endif
