@@ -12,12 +12,12 @@
 #import <assert.h>
 #import "MetalUtil.h"
 
-namespace MDCTools {
+namespace Toastbox {
 
 // Renderer is a wrapper for Metal APIs to make them more convenient.
 // Renderer particularly improves executing multiple fragment render passes.
 class Renderer {
-#define _ShaderNamespace "MDCTools::RendererShader::"
+#define _ShaderNamespace "Toastbox::RendererShader::"
 #define _DefaultVertexShader _ShaderNamespace "VertexShader"
 #define _DefaultFragmentShader _ShaderNamespace "FragmentShader"
 private:
@@ -225,7 +225,7 @@ public:
         const _VertexShader<T_VertArgs...>& vert,
         const _FragmentShader<T_FragArgs...>& frag
     ) {
-        render(txt, blendType, MTLPrimitiveTypeTriangle, MDCTools::MetalUtil::SquareVertCount, 1,
+        render(txt, blendType, MTLPrimitiveTypeTriangle, Toastbox::MetalUtil::SquareVertCount, 1,
             vert,
             frag
         );
@@ -334,7 +334,7 @@ public:
         }, frag.args);
         
         [enc drawPrimitives:MTLPrimitiveTypeTriangle
-            vertexStart:0 vertexCount:MDCTools::MetalUtil::SquareVertCount];
+            vertexStart:0 vertexCount:Toastbox::MetalUtil::SquareVertCount];
         
         [enc endEncoding];
     }
@@ -474,7 +474,7 @@ public:
             [desc setPixelFormat:fmt];
             [desc setUsage:usage];
             id<MTLTexture> txt = [dev newTextureWithDescriptor:desc];
-            Assert(txt, return Txt());
+            if (!txt) return {};
             return Txt(*this, txt);
         }
     }
@@ -904,7 +904,7 @@ private:
         }
         
         id<MTLBuffer> buf = [dev newBufferWithLength:len options:(storageMode<<MTLResourceStorageModeShift)];
-        Assert(buf, return Buf());
+        if (!buf) return {};
         return Buf(*this, buf, deferRecycle);
     }
     
@@ -927,9 +927,9 @@ private:
         auto find = _renderPipelineStates.find(key);
         if (find != _renderPipelineStates.end()) return find->second;
         
-        id<MTLFunction> vertShader = MDCTools::MetalUtil::MTLFunctionWithName(_lib, vertName);
+        id<MTLFunction> vertShader = Toastbox::MetalUtil::MTLFunctionWithName(_lib, vertName);
         assert(vertShader);
-        id<MTLFunction> fragShader = MDCTools::MetalUtil::MTLFunctionWithName(_lib, fragName);
+        id<MTLFunction> fragShader = Toastbox::MetalUtil::MTLFunctionWithName(_lib, fragName);
         assert(fragShader);
         
         MTLRenderPipelineDescriptor* desc = [MTLRenderPipelineDescriptor new];
@@ -949,7 +949,7 @@ private:
         }
         
         id<MTLRenderPipelineState> ps = [dev newRenderPipelineStateWithDescriptor:desc error:nil];
-        Assert(ps, return nil);
+        if (!ps) return nil;
         _renderPipelineStates.insert(find, {key, ps});
         return ps;
     }
@@ -958,11 +958,11 @@ private:
         auto find = _computePipelineStates.find(fnName);
         if (find != _computePipelineStates.end()) return find->second;
         
-        id<MTLFunction> fn = MDCTools::MetalUtil::MTLFunctionWithName(_lib, fnName);
+        id<MTLFunction> fn = Toastbox::MetalUtil::MTLFunctionWithName(_lib, fnName);
         assert(fn);
         
         id<MTLComputePipelineState> ps = [dev newComputePipelineStateWithFunction:fn error:nil];
-        Assert(ps, return nil);
+        if (!ps) return nil;
         
         _computePipelineStates.insert(find, {std::string(fnName), ps});
         return ps;
@@ -1061,4 +1061,4 @@ private:
 #undef _ShaderNamespace
 }; // class Renderer
 
-} // namespace MDCTools
+} // namespace Toastbox

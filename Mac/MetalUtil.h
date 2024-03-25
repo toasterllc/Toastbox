@@ -23,7 +23,7 @@
 #define MetalThread
 #endif
 
-namespace MDCTools {
+namespace Toastbox {
 namespace MetalUtil {
 
 constexpr MetalConstant simd::float2 SquareVert[6] = {
@@ -143,7 +143,7 @@ namespace Sample {
 #endif // MetalShaderContext
 
 } // namespace MetalUtil
-} // namespace MDCTools
+} // namespace Toastbox
 
 #if !MetalShaderContext
 
@@ -160,7 +160,7 @@ namespace Sample {
 - (id<MTLFunction>)newFunctionWithName:(NSString*)functionName __attribute__((ns_returns_not_retained));
 @end
 
-namespace MDCTools::MetalUtil {
+namespace Toastbox::MetalUtil {
 
 inline id<MTLFunction> MTLFunctionWithName(id<MTLLibrary> lib, std::string_view name) {
     id<MTLLibraryReturnsAutoreleasedFix> l = (id)lib;

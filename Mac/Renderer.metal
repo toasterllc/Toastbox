@@ -1,20 +1,20 @@
 #import <metal_stdlib>
 #import "MetalUtil.h"
 using namespace metal;
-using namespace MDCTools::MetalUtil;
+using namespace Toastbox::MetalUtil;
 
-namespace MDCTools {
+namespace Toastbox {
 namespace RendererShader {
 
 vertex VertexOutput VertexShader(uint vidx [[vertex_id]]) {
-    return MDCTools::MetalUtil::VertexShader(vidx);
+    return Toastbox::MetalUtil::VertexShader(vidx);
 }
 
 fragment float4 FragmentShader(
     texture2d<float> txt [[texture(0)]],
     VertexOutput in [[stage_in]]
 ) {
-    return MDCTools::MetalUtil::FragmentShader(txt, in);
+    return Toastbox::MetalUtil::FragmentShader(txt, in);
 }
 
 template <typename T>
@@ -108,4 +108,4 @@ fragment float4 Copy4To4(
 }
 
 } // namespace RendererShader
-} // namespace MDCTools
+} // namespace Toastbox
