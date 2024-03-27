@@ -35,8 +35,14 @@ public:
         _init(std::move(fd), cap, oflags);
     }
     
+    Mmap(const std::filesystem::path& path, std::optional<size_t> cap=std::nullopt, int oflags=O_RDONLY) {
+        int fd = open(path.c_str(), oflags);
+        if (fd < 0) throw RuntimeError("open failed: %s", strerror(errno));
+        _init(fd, cap, oflags);
+    }
+    
     template<typename... T_Args>
-    Mmap(const std::filesystem::path& path, std::optional<size_t> cap=std::nullopt, int oflags=O_RDONLY, T_Args&&...args) {
+    Mmap(const std::filesystem::path& path, std::optional<size_t> cap, int oflags, T_Args&&... args) {
         int fd = open(path.c_str(), oflags, args...);
         if (fd < 0) throw RuntimeError("open failed: %s", strerror(errno));
         _init(fd, cap, oflags);
