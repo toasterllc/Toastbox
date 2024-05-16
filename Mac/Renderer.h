@@ -9,6 +9,7 @@
 #import <set>
 #import <mutex>
 #import <functional>
+#import <filesystem>
 #import <assert.h>
 #import "MetalUtil.h"
 
@@ -718,19 +719,22 @@ public:
         return CFBridgingRelease(CGBitmapContextCreateImage((CGContextRef)ctx));
     }
     
-    void debugTextureShow(id<MTLTexture> txt) {
-        const char* outputPath = "/tmp/tempimage.png";
-        
+    void debugTextureWrite(id<MTLTexture> txt, const std::filesystem::path& p) {
         sync(txt);
         commitAndWait();
         
         id img = imageCreate(txt);
         assert(img);
-        NSURL* outputURL = [NSURL fileURLWithPath:@(outputPath)];
+        NSURL* outputURL = [NSURL fileURLWithPath:@(p.c_str())];
         CGImageDestinationRef imageDest = CGImageDestinationCreateWithURL((CFURLRef)outputURL, kUTTypePNG, 1, nullptr);
         CGImageDestinationAddImage(imageDest, (__bridge CGImageRef)img, nullptr);
         CGImageDestinationFinalize(imageDest);
-        system((std::string("open ") + outputPath).c_str());
+    }
+    
+    void debugTextureShow(id<MTLTexture> txt) {
+        static constexpr const char* OutputPath = "/tmp/tempimage.png";
+        debugTextureWrite(txt, OutputPath);
+        system((std::string("open ") + OutputPath).c_str());
     }
     
     id<MTLCommandBuffer> cmdBuf() {
