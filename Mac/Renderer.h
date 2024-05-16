@@ -114,6 +114,7 @@ public:
         switch (fmt) {
         case MTLPixelFormatR8Unorm:         return 1;
         case MTLPixelFormatR16Unorm:        return 1;
+        case MTLPixelFormatR16Float:        return 1;
         case MTLPixelFormatR32Float:        return 1;
         case MTLPixelFormatRGBA8Unorm:      return 4;
         case MTLPixelFormatRGBA8Unorm_sRGB: return 4;
@@ -130,6 +131,7 @@ public:
         switch (fmt) {
         case MTLPixelFormatR8Unorm:         return 1;
         case MTLPixelFormatR16Unorm:        return 2;
+        case MTLPixelFormatR16Float:        return 2;
         case MTLPixelFormatR32Float:        return 4;
         case MTLPixelFormatRGBA8Unorm:      return 1;
         case MTLPixelFormatRGBA8Unorm_sRGB: return 1;
