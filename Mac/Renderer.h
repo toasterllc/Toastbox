@@ -663,11 +663,11 @@ public:
             premulAlpha = true;
             break;
         case MTLPixelFormatRGBA16Float:
-            opts = kCGImageAlphaPremultipliedLast|kCGBitmapFloatComponents|kCGBitmapByteOrder16Host;
+            opts = (CGBitmapInfo)kCGImageAlphaPremultipliedLast|kCGBitmapFloatComponents|kCGBitmapByteOrder16Host;
             premulAlpha = true;
             break;
         case MTLPixelFormatRGBA32Float:
-            opts = kCGImageAlphaPremultipliedLast|kCGBitmapFloatComponents|kCGBitmapByteOrder32Host;
+            opts = (CGBitmapInfo)kCGImageAlphaPremultipliedLast|kCGBitmapFloatComponents|kCGBitmapByteOrder32Host;
             premulAlpha = true;
             break;
         default:
