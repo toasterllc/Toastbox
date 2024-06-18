@@ -17,12 +17,12 @@ fragment float4 FragmentShader(
     return Toastbox::MetalUtil::FragmentShader(txt, in);
 }
 
-template <typename T>
+template<typename T>
 float LoadFloat(uint32_t w, uint32_t h, uint32_t samplesPerPixel, uint32_t maxValue, constant T* data, int2 pos) {
     return (float)data[samplesPerPixel*(w*pos.y + pos.x)] / maxValue;
 }
 
-template <typename T>
+template<typename T>
 float4 LoadFloat4(uint32_t w, uint32_t h, uint32_t samplesPerPixel, uint32_t maxValue, constant T* data, int2 pos) {
     return float4(
         (float)data[samplesPerPixel*(w*pos.y + pos.x) + 0] / maxValue,

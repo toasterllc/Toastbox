@@ -22,26 +22,26 @@ class Renderer {
 #define _DefaultVertexShader _ShaderNamespace "VertexShader"
 #define _DefaultFragmentShader _ShaderNamespace "FragmentShader"
 private:
-    template <typename... T_Args>
+    template<typename... T_Args>
     struct _VertexShader {
         std::string_view fn;
         std::tuple<T_Args...> args;
     };
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     struct _FragmentShader {
         std::string_view fn;
         std::tuple<T_Args...> args;
     };
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     struct _ComputeKernel {
         std::string_view fn;
         std::tuple<T_Args...> args;
     };
     
 public:
-    template <typename T>
+    template<typename T>
     class Resource {
     public:
         // Default constructor
@@ -160,7 +160,7 @@ public:
         [enc endEncoding];
     }
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     _VertexShader<T_Args...> VertexShader(std::string_view fn, T_Args&&... args) {
         return _VertexShader<T_Args...>{
             .fn = fn,
@@ -168,7 +168,7 @@ public:
         };
     }
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     _FragmentShader<T_Args...> FragmentShader(std::string_view fn, T_Args&&... args) {
         return _FragmentShader<T_Args...>{
             .fn = fn,
@@ -176,7 +176,7 @@ public:
         };
     }
     
-    template <typename... T_Args>
+    template<typename... T_Args>
     _ComputeKernel<T_Args...> ComputeKernel(std::string_view fn, T_Args&&... args) {
         return _ComputeKernel<T_Args...>{
             .fn = fn,
@@ -185,7 +185,7 @@ public:
     }
     
     // Render pass to a target texture
-    template <typename... T_FragArgs>
+    template<typename... T_FragArgs>
     void render(
         id<MTLTexture> txt,
         const _FragmentShader<T_FragArgs...>& frag
@@ -208,7 +208,7 @@ public:
     }
     
     // Render pass to a target texture
-    template <typename... T_FragArgs>
+    template<typename... T_FragArgs>
     void render(
         id<MTLTexture> txt,
         BlendType blendType,
@@ -221,7 +221,7 @@ public:
     }
     
     // Render pass to a target texture
-    template <typename... T_VertArgs, typename... T_FragArgs>
+    template<typename... T_VertArgs, typename... T_FragArgs>
     void render(
         id<MTLTexture> txt,
         BlendType blendType,
@@ -235,7 +235,7 @@ public:
     }
     
     // Render pass to a target texture
-    template <typename... T_VertArgs, typename... T_FragArgs>
+    template<typename... T_VertArgs, typename... T_FragArgs>
     void render(
         id<MTLTexture> txt,
         BlendType blendType,
@@ -278,7 +278,7 @@ public:
     
     // Render pass with no target texture
     // (Fragment shaders typically use texture.write() in this case)
-    template <typename... T_FragArgs>
+    template<typename... T_FragArgs>
     void render(
         size_t width,
         size_t height,
@@ -292,7 +292,7 @@ public:
     
     // Render pass with no target texture
     // (Fragment shaders typically use texture.write() in this case)
-    template <typename... T_FragArgs>
+    template<typename... T_FragArgs>
     void render(
         size_t width,
         size_t height,
@@ -307,7 +307,7 @@ public:
     
     // Render pass with no target texture
     // (Fragment shaders typically use texture.write() in this case)
-    template <typename... T_VertArgs, typename... T_FragArgs>
+    template<typename... T_VertArgs, typename... T_FragArgs>
     void render(
         size_t width,
         size_t height,
@@ -343,7 +343,7 @@ public:
     }
     
     // Compute pass with compute kernel
-    template <typename... T_Args>
+    template<typename... T_Args>
     void compute(
         size_t width,
         size_t height,
@@ -520,7 +520,7 @@ public:
     }
     
     // Write samples (from a raw pointer) to a texture
-    template <typename T>
+    template<typename T>
     void textureWrite(
         id<MTLTexture> txt,
         T* samples,
@@ -581,7 +581,7 @@ public:
     }
     
     // Read samples from a texture
-    template <typename T>
+    template<typename T>
     std::vector<T> textureRead(id<MTLTexture> txt) {
         const size_t w = [txt width];
         const size_t h = [txt height];
@@ -595,7 +595,7 @@ public:
     }
     
     // Read samples from a texture
-    template <typename T>
+    template<typename T>
     void textureRead(id<MTLTexture> txt, T* samples, size_t cap) {
         const size_t w = [txt width];
         const size_t h = [txt height];
@@ -603,7 +603,7 @@ public:
     }
     
     // Read samples from a texture
-    template <typename T>
+    template<typename T>
     void textureRead(id<MTLTexture> txt, T* samples, size_t cap, MTLRegion region) {
         const MTLPixelFormat fmt = [txt pixelFormat];
         const size_t samplesPerPixel = SamplesPerPixel(fmt);
@@ -788,7 +788,7 @@ private:
     
     void _SetBufferArgs(_ShaderType type, id<MTLRenderCommandEncoder> enc, size_t idx) {}
     
-    template <typename T, typename... Ts>
+    template<typename T, typename... Ts>
     void _SetBufferArgs(_ShaderType type, id<MTLRenderCommandEncoder> enc, size_t idx, T& t, Ts&&... ts) {
         using U = typename std::remove_cv<T>::type;
         if constexpr (!std::is_same<U,Txt>::value && !std::is_same<U,id<MTLTexture>>::value) {
@@ -820,7 +820,7 @@ private:
     
     void _SetTextureArgs(_ShaderType type, id<MTLRenderCommandEncoder> enc, size_t idx) {}
     
-    template <typename T, typename... Ts>
+    template<typename T, typename... Ts>
     void _SetTextureArgs(_ShaderType type, id<MTLRenderCommandEncoder> enc, size_t idx, T& t, Ts&&... ts) {
         using U = typename std::remove_cv<T>::type;
         if constexpr (std::is_same<U,Txt>::value) {
@@ -851,7 +851,7 @@ private:
     
     void _SetBufferArgs(id<MTLComputeCommandEncoder> enc, size_t idx) {}
     
-    template <typename T, typename... Ts>
+    template<typename T, typename... Ts>
     void _SetBufferArgs(id<MTLComputeCommandEncoder> enc, size_t idx, T& t, Ts&&... ts) {
         using U = typename std::remove_cv<T>::type;
         if constexpr (!std::is_same<U,Txt>::value && !std::is_same<U,id<MTLTexture>>::value) {
@@ -871,7 +871,7 @@ private:
     
     void _SetTextureArgs(id<MTLComputeCommandEncoder> enc, size_t idx) {}
     
-    template <typename T, typename... Ts>
+    template<typename T, typename... Ts>
     void _SetTextureArgs(id<MTLComputeCommandEncoder> enc, size_t idx, T& t, Ts&&... ts) {
         using U = typename std::remove_cv<T>::type;
         if constexpr (std::is_same<U,Txt>::value) {
@@ -1059,7 +1059,7 @@ private:
     
     id<MTLCommandBuffer> _cmdBuf = nil;
     
-    template <class...> static constexpr std::false_type _AlwaysFalse;
+    template<class...> static constexpr std::false_type _AlwaysFalse;
     
     friend class Resource<id<MTLTexture>>;
     friend class Resource<id<MTLBuffer>>;

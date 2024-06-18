@@ -5,7 +5,7 @@
 
 namespace Toastbox {
 
-template <typename T, size_t H, size_t W>
+template<typename T, size_t H, size_t W>
 class Mat {
 public:
     static constexpr bool Vector = (W==1);
@@ -27,7 +27,7 @@ public:
     }
     
     // Load from row-major parameter pack
-    template <typename... Ts>
+    template<typename... Ts>
     Mat(Ts... ts) : Mat() {
         static_assert(sizeof...(ts)==Count, "invalid number of values");
         RowMajorIter i = beginRow();
@@ -35,7 +35,7 @@ public:
     }
     
 //    struct ColumnMajorType {}; static constexpr auto ColumnMajor = ColumnMajorType();
-//    template <typename... Ts>
+//    template<typename... Ts>
 //    Mat(ColumnMajorType, Ts... ts) : Mat() {
 //        static_assert(sizeof...(ts)==Count, "invalid number of values");
 //        auto i = begin();
@@ -109,7 +109,7 @@ public:
     }
     
     // Matrix multiply
-    template <size_t N>
+    template<size_t N>
     Mat<T,H,N> operator*(const Mat<T,W,N>& b) const {
         const auto& a = *this;
         Mat<T,H,N> r;
@@ -358,13 +358,13 @@ public:
         return &_vals()[x*H];
     }
     
-    template <size_t T_N>
+    template<size_t T_N>
     void get(T (&x)[T_N]) const {
         static_assert(T_N == Count);
         std::copy(begin(), end(), std::begin(x));
     }
     
-    template <size_t T_H, size_t T_W>
+    template<size_t T_H, size_t T_W>
     void get(T (&x)[T_W][T_H]) const {
         static_assert(T_H == T_H);
         static_assert(T_W == T_W);
@@ -395,7 +395,7 @@ public:
     }
     
     // Solve `Ax=b` for x, where the receiver is A
-    template <size_t N>
+    template<size_t N>
     Mat<T,W,N> solve(const Mat<T,H,N>& bconst) const {
         static_assert(H>=W, "matrix size must have H >= W");
         
@@ -573,12 +573,12 @@ private:
         float, double
     >;
     
-    template <typename I>
+    template<typename I>
     static constexpr bool _IsPowerOf2(I x) {
         return x && ((x & (x-1)) == 0);
     }
     
-    template <typename I>
+    template<typename I>
     static I _Log2(I x) {
         if (x == 0) return 0;
         return flsll(x)-1;
@@ -730,7 +730,7 @@ public:
     using ValueType = T;
     
 private:
-    template <typename Float>
+    template<typename Float>
     class FFTSetup {
     public:
         FFTSetup() {
@@ -772,13 +772,13 @@ private:
         void* _s = nullptr;
     };
     
-    template <class...> static constexpr std::false_type _AlwaysFalse;
+    template<class...> static constexpr std::false_type _AlwaysFalse;
     
-    template <typename Iter>
+    template<typename Iter>
     void _load(Iter& i) {}
     
     // Load a parameter pack of elements into `vals` using an iterator
-    template <typename Iter, typename... Ts>
+    template<typename Iter, typename... Ts>
     void _load(Iter& i, T& t, Ts&... ts) {
         *i = t;
         i++;
@@ -794,7 +794,7 @@ private:
     
     _Storage _storage = {};
     
-    template <typename, size_t, size_t>
+    template<typename, size_t, size_t>
     friend class Mat;
 };
 

@@ -24,7 +24,7 @@ namespace White {
 }
 
 namespace ColorSpace {
-    template <typename Space>
+    template<typename Space>
     Mat<double,3,3> XYZFromRGBMatrix() {
         const double xr = Space::R[0];
         const double yr = Space::R[1];
@@ -62,12 +62,12 @@ namespace ColorSpace {
         return M;
     }
     
-    template <typename Space>
+    template<typename Space>
     Mat<double,3,3> RGBFromXYZMatrix() {
         return XYZFromRGBMatrix<Space>().inv();
     }
     
-    template <typename W>
+    template<typename W>
     struct XYZ {
         using White = W;
     };
@@ -115,13 +115,13 @@ namespace ColorSpace {
     };
     
     // X<->X (converting between the same colorspace -- no-op)
-    template <typename X>
+    template<typename X>
     Float3 Convert(X, X, const Float3& c) {
         return c;
     }
     
     // XYZ.WhiteSrc<->XYZ.WhiteDst (perform chromatic adaptation)
-    template <typename WhiteSrc, typename WhiteDst,
+    template<typename WhiteSrc, typename WhiteDst,
     // Only enable if WhiteSrc!=WhiteDst, otherwise this will be ambiguous with Convert(X,X)
     typename std::enable_if<!std::is_same<WhiteSrc,WhiteDst>::value, bool>::type = false>
     Float3 Convert(XYZ<WhiteSrc>, XYZ<WhiteDst>, const Float3& c) {
@@ -187,14 +187,14 @@ namespace ColorSpace {
         return RGBFromXYZMatrix<ProPhotoRGB>()*c;
     }
     
-    template <typename Src, typename Dst, typename = void>
+    template<typename Src, typename Dst, typename = void>
     struct CanConvert : std::false_type {};
 
-    template <typename Src, typename Dst>
+    template<typename Src, typename Dst>
     struct CanConvert<Src, Dst, std::void_t<decltype(Convert(Src{}, Dst{}, {}))>> : std::true_type {};
 }
 
-template <typename Space>
+template<typename Space>
 class Color {
 public:
     Color() {}
@@ -202,7 +202,7 @@ public:
     Color(double x0, double x1, double x2) : m(x0,x1,x2) {}
     
     // Direct conversion (SpaceSrc -> Space)
-    template <typename SpaceSrc,
+    template<typename SpaceSrc,
     // Only enable this constructor if direct conversion is possible from SpaceSrc->Space
     std::enable_if_t<ColorSpace::CanConvert<SpaceSrc,Space>::value, bool> = false
     >
@@ -214,7 +214,7 @@ public:
     }
     
     // Indirect conversion (SpaceSrc -> XYZ -> Space)
-    template <typename SpaceSrc,
+    template<typename SpaceSrc,
     // Only enable this constructor if direct conversion is NOT possible from SpaceSrc->Space
     std::enable_if_t<!ColorSpace::CanConvert<SpaceSrc,Space>::value, bool> = false
     >
