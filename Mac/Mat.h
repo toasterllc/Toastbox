@@ -386,7 +386,7 @@ public:
         return ss.str();
     }
     
-    void print(int precision=6) {
+    void print(int precision=6) const {
         std::cout << str(precision) << "\n";
     }
     
