@@ -114,6 +114,13 @@ namespace ColorSpace {
         using White = White::D50;
     };
     
+    struct P3Display {
+        static constexpr double R[] = { 0.680, 0.320 };
+        static constexpr double G[] = { 0.265, 0.690 };
+        static constexpr double B[] = { 0.150, 0.060 };
+        using White = White::D65;
+    };
+    
     // X<->X (converting between the same colorspace -- no-op)
     template<typename X>
     Float3 Convert(X, X, const Float3& c) {
