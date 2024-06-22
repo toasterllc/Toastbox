@@ -6,6 +6,7 @@ namespace Toastbox {
 
 struct TIFF {
     static constexpr uint16_t Byte      = 1;
+    static constexpr uint16_t ASCII     = 2;
     static constexpr uint16_t Short     = 3;
     static constexpr uint16_t Long      = 4;
     static constexpr uint16_t Rational  = 5;
