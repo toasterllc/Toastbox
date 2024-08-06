@@ -81,6 +81,12 @@ struct TIFF {
         push(val);
     }
     
+    void push(float x) {
+        const auto [num, den] = _RationalForDouble(x);
+        push(num);
+        push(den);
+    }
+    
     void push(double x) {
         const auto [num, den] = _RationalForDouble(x);
         push(num);
