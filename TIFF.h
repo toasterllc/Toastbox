@@ -1,6 +1,7 @@
 #include <vector>
 #include <limits>
 #include <utility>
+#include <optional>
 
 namespace Toastbox {
 
@@ -56,9 +57,15 @@ struct TIFF {
         size_t off = 0;
     };
     
+    // Base implementation; other push() variants must funnel through here
+    void push(const void* data, size_t len) {
+        _data.insert(_data.end(), (const uint8_t*)data, (const uint8_t*)data+len);
+        _tag = std::nullopt;
+    }
+    
     template<typename T>
     void push(T t={}) {
-        _data.insert(_data.end(), (uint8_t*)&t, (uint8_t*)&t+sizeof(t));
+        push((uint8_t*)&t, sizeof(t));
     }
     
     template<typename T>
@@ -68,17 +75,23 @@ struct TIFF {
     }
     
     void push(uint16_t tag, uint16_t type, uint32_t count, uint32_t val) {
+        // Tags must be monotonically increasing according to TIFF spec
+        assert(!_tag || tag>*_tag);
         push(tag);
         push(type);
         push(count);
         push(val);
+        _tag = tag;
     }
     
     void push(uint16_t tag, uint16_t type, uint32_t count, Val<uint32_t>& val) {
+        // Tags must be monotonically increasing according to TIFF spec
+        assert(!_tag || tag>*_tag);
         push(tag);
         push(type);
         push(count);
         push(val);
+        _tag = tag;
     }
     
     void push(float x) {
@@ -93,21 +106,12 @@ struct TIFF {
         push(den);
     }
     
-    void push(const void* data, size_t len) {
-        _data.insert(_data.end(), (const uint8_t*)data, (const uint8_t*)data+len);
-    }
-    
     template<typename T>
     void push(T begin, T end) {
         for (T it=begin; it!=end; it++) {
             push(*it);
         }
     }
-    
-//    template<size_t T_SIZE>
-//    void push(const double (&x)[T_SIZE]) {
-//        for (double d : x) push(d);
-//    }
     
     template<typename T>
     void set(Val<T> val, T t) {
@@ -126,6 +130,7 @@ struct TIFF {
     }
     
     std::vector<uint8_t> _data;
+    std::optional<uint16_t> _tag;
 };
 
 } // namespace Toastbox
