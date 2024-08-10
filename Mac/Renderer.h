@@ -623,7 +623,7 @@ public:
     }
     
     // Create a CGImage from a texture
-    id /* CGImageRef */ imageCreate(id<MTLTexture> txt) {
+    id /* CGImageRef */ imageCreate(id<MTLTexture> txt, bool srgbGammaApply=false) {
         const size_t w = [txt width];
         const size_t h = [txt height];
         const MTLPixelFormat fmt = [txt pixelFormat];
@@ -677,16 +677,34 @@ public:
             throw std::runtime_error("invalid texture format");
         }
         
-        if (premulAlpha) {
-            // Load pixel data into `txt`
+        // Prevent the sRGB gamma from being doubly-applied
+        assert(!(srgbGammaApplied && srgbGammaApply));
+        
+        if (srgbGammaApply || premulAlpha) {
             Txt tmp = textureCreate(fmt, w, h);
-            render(tmp, BlendType::None,
-                FragmentShader(
-                    _ShaderNamespace "PremulAlpha",
-                    // Texture args
-                    txt
-                )
-            );
+            copy(txt, tmp);
+            
+            if (srgbGammaApply) {
+                render(tmp, BlendType::None,
+                    FragmentShader(
+                        _ShaderNamespace "SRGBGamma",
+                        // Texture args
+                        tmp
+                    )
+                );
+                srgbGammaApplied = true;
+            }
+            
+            if (premulAlpha) {
+                render(tmp, BlendType::None,
+                    FragmentShader(
+                        _ShaderNamespace "PremulAlpha",
+                        // Texture args
+                        tmp
+                    )
+                );
+            }
+            
             sync(tmp);
             commitAndWait();
             txt = tmp;
