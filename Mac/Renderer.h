@@ -99,10 +99,11 @@ public:
         return cs;
     }
     
-    Renderer() {}
-    Renderer(id<MTLDevice> dev, id<MTLLibrary> lib, id<MTLCommandQueue> commandQueue) :
-    dev(dev), _lib(lib), _commandQueue(commandQueue), _recycleBufs(std::make_shared<_RecycleBufs>()) {
-    }
+    Renderer() :
+    dev(MTLCreateSystemDefaultDevice()),
+    _lib([dev newDefaultLibrary]),
+    _commandQueue([dev newCommandQueue]),
+    _recycleBufs(std::make_shared<_RecycleBufs>()) {}
     
     ~Renderer() {
         // When the renderer is destroyed, make sure that there are no resources that were waiting to be recycled.
