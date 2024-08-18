@@ -22,14 +22,15 @@ T CastOrNull(id obj) {
 template<typename Fn>
 inline void TrackMouse(NSWindow* win, NSEvent* ev, Fn fn) {
     for (;;) @autoreleasepool {
-        const bool done = ([ev type] == NSEventTypeLeftMouseUp);
-        fn(ev, done);
-        if (done) {
+        const bool mouseUp = ([ev type] == NSEventTypeLeftMouseUp);
+        const bool cont = fn(ev, mouseUp);
+        if (mouseUp) {
             // The mouse-up event needs to propogate into the app to complement the
             // mouse-down event. (The internal Cocoa APIs expect it.)
             [win sendEvent:ev];
-            break;
         }
+        
+        if (mouseUp || !cont) break;
         
         ev = [win nextEventMatchingMask:
             NSEventMaskLeftMouseDown    |
