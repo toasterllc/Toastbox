@@ -540,10 +540,11 @@ private:
         reference operator*() const { return *_cur; }
         pointer operator->() { return _cur; }
         RowMajorIter& operator++() {
+            
             const size_t rem = _end-_cur-1;
-            if (!rem)         _cur++;              // This was the last element, so increment to match end() iterator
-            else if (rem < H) _cur -= ((W-1)*H)-1; // Col=0, Row++
-            else              _cur += H;           // Next column
+            if (!rem)         _cur++;                       // This was the last element, so increment to match end() iterator
+            else if (rem < H) _cur = (_cur-((W-1)*H)) + 1;  // Last column -> first column; row++
+            else              _cur += H;                    // Next column
             return *this;
         }
         
