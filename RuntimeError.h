@@ -4,10 +4,10 @@
 namespace Toastbox {
 
 struct RuntimeError : std::runtime_error {
+    // _RuntimeErrorFmtMsg() base case:
+    // Necessary to silence "Format string is not a string literal (potentially insecure)"
     static std::string _RuntimeErrorFmtMsg(const char* str) {
-        char msg[512];
-        snprintf(msg, sizeof(msg), "%s", str);
-        return msg;
+        return str;
     }
 
     template<typename ...Args>
