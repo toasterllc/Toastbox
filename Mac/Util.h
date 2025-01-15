@@ -1,5 +1,6 @@
 #pragma once
 #import <Cocoa/Cocoa.h>
+#import <type_traits>
 
 namespace Toastbox {
 
