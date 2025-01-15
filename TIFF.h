@@ -2,6 +2,7 @@
 #include <limits>
 #include <utility>
 #include <optional>
+#include <fstream>
 
 namespace Toastbox {
 
