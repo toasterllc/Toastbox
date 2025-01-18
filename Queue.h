@@ -63,7 +63,7 @@ private:
     bool _full = T_FullReset;
     
     static void _Assert(bool c) {
-        if constexpr (!std::is_same<decltype(T_Assert), std::nullptr_t>::value) {
+        if constexpr (!std::is_same_v<decltype(T_Assert), std::nullptr_t>) {
             T_Assert(c);
         }
     }
