@@ -324,8 +324,11 @@ public:
         };
     }
     
-    USB::StringDescriptorMax stringDescriptor(uint8_t idx, uint16_t lang=USB::Language::English) const {
+    USB::StringDescriptorMax stringDescriptor(uint8_t idx, uint16_t lang=USB::Language::English) {
         using namespace Endian;
+        
+//        _openIfNeeded();
+        
         USB::StringDescriptorMax desc;
         IOUSBDevRequest req = {
             .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
@@ -341,7 +344,9 @@ public:
         return desc;
     }
     
-    void debugGetStatus() const {
+    void debugGetStatus() {
+        _openIfNeeded();
+        
         uint8_t status[2];
         
         IOUSBDevRequest req = {
@@ -359,6 +364,7 @@ public:
     
     template<typename... T_Args>
     auto read(uint8_t epAddr, T_Args&&... args) {
+        _openIfNeeded();
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         return iface.read(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -366,6 +372,7 @@ public:
     
     template<typename... T_Args>
     void write(uint8_t epAddr, T_Args&&... args) {
+        _openIfNeeded();
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.write(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -373,6 +380,7 @@ public:
     
     template<typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
+        _openIfNeeded();
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -384,6 +392,8 @@ public:
     }
     
     void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
+        _openIfNeeded();
+        
         if (timeout == Forever) {
             IOUSBDevRequest usbReq = {
                 .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
@@ -439,20 +449,28 @@ private:
 //        const uint8_t ifaceIdx = _ifaceIdxFromEp[_IdxForEndpointAddr(epAddr)];
 //        return _interfaces.at(ifaceIdx);
 //    }
-//    
-//    void _openIfNeeded() {
+    public:
+    void open() {
+        if (_open) return;
+        // Open the device
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
+        _CheckErr(ior, "USBDeviceOpen failed");
+        _open = true;
+    }
+    
+    void _openIfNeeded() {
 //        if (_open) return;
 //        // Open the device
 //        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
 //        _CheckErr(ior, "USBDeviceOpen failed");
 //        _open = true;
-//    }
+    }
     
     SendRight _service;
     _IOUSBDeviceInterface _iokitInterface;
     std::vector<_Interface> _interfaces;
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount];
-//    bool _open = false;
+    bool _open = false;
     
 #elif __linux__
     
@@ -693,15 +711,15 @@ public:
         return epInfo.maxPacketSize;
     }
     
-    std::string manufacturer() const {
+    std::string manufacturer() {
         return stringDescriptor(deviceDescriptor().iManufacturer).asciiString();
     }
     
-    std::string product() const {
+    std::string product() {
         return stringDescriptor(deviceDescriptor().iProduct).asciiString();
     }
     
-    std::string serialNumber() const {
+    std::string serialNumber() {
         return stringDescriptor(deviceDescriptor().iSerialNumber).asciiString();
     }
     
