@@ -30,13 +30,17 @@ struct SignalQueue : Queue<T_Item,T_Count,T_FullReset,T_Assert> {
         _signal.signalAll();
     }
     
-    void reset() {
-        {
-            auto lock = _signal.lock();
-            _Super::reset();
-        }
-        _signal.signalAll();
+    void stop() {
+        _signal.stop();
     }
+    
+//    void reset() {
+//        {
+//            auto lock = _signal.lock();
+//            _Super::reset();
+//        }
+//        _signal.signalAll();
+//    }
     
     using _Super = Queue<T_Item,T_Count,T_FullReset,T_Assert>;
     Signal _signal;
