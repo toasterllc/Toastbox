@@ -148,7 +148,7 @@ struct USBDevice {
     USBDevice& operator=(USBDevice&& x) = default;
     
 #if __APPLE__
-    static std::vector<USBDevicePtr> GetDevices() {
+    static std::vector<USBDevicePtr> DevicesGet() {
         std::vector<USBDevicePtr> devices;
         io_iterator_t ioServicesIter = MACH_PORT_NULL;
         kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, IOServiceMatching(kIOUSBDeviceClassName), &ioServicesIter);
@@ -449,7 +449,7 @@ struct USBDevice {
     
 #elif __linux__
     
-    static std::vector<USBDevice> GetDevices() {
+    static std::vector<USBDevice> DevicesGet() {
         libusb_device** devs = nullptr;
         ssize_t devsCount = libusb_get_device_list(_USBCtx(), &devs);
         _CheckErr((int)devsCount, "libusb_get_device_list failed");
