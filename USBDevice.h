@@ -23,14 +23,12 @@
 namespace Toastbox {
 
 struct USBDevice; using USBDevicePtr = std::unique_ptr<USBDevice>;
-class USBDevice {
-public:
+struct USBDevice {
     using Milliseconds = std::chrono::milliseconds;
     static constexpr inline Milliseconds Forever = Milliseconds::max();
     
 #if __APPLE__
     
-private:
     template<typename T>
     static void _Retain(T** x) { (*x)->AddRef(x); }
     
@@ -41,8 +39,7 @@ private:
     using _IOUSBDeviceInterface = RefCounted<IOUSBDeviceInterface**, _Retain<IOUSBDeviceInterface>, _Release<IOUSBDeviceInterface>>;
     using _IOUSBInterfaceInterface = RefCounted<IOUSBInterfaceInterface**, _Retain<IOUSBInterfaceInterface>, _Release<IOUSBInterfaceInterface>>;
     
-    class _Interface {
-    public:
+    struct _Interface {
         template<auto T_Fn, typename... T_Args>
         IOReturn iokitExec(T_Args&&... args) const {
             assert(_iokitInterface);
@@ -83,6 +80,14 @@ private:
             }
         }
         
+        void claim() {
+            if (_claimed) return;
+            // Open the interface
+            IOReturn ior = iokitExec<&IOUSBInterfaceInterface::USBInterfaceOpen>();
+            _CheckErr(ior, "USBInterfaceOpen failed");
+            _claimed = true;
+        }
+        
         template<typename T>
         void read(uint8_t pipeRef, T& t, Milliseconds timeout=Forever) {
             const size_t len = read(pipeRef, (void*)&t, sizeof(t), timeout);
@@ -91,7 +96,6 @@ private:
         }
         
         size_t read(uint8_t pipeRef, void* buf, size_t len, Milliseconds timeout=Forever) {
-            _openIfNeeded();
             uint32_t len32 = (uint32_t)len;
             if (timeout == Forever) {
                 IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ReadPipe>(pipeRef, buf, &len32);
@@ -109,7 +113,6 @@ private:
         }
         
         void write(uint8_t pipeRef, const void* buf, size_t len, Milliseconds timeout=Forever) {
-            _openIfNeeded();
             if (timeout == Forever) {
                 IOReturn ior = iokitExec<&IOUSBInterfaceInterface::WritePipe>(pipeRef, (void*)buf, (uint32_t)len);
                 _CheckErr(ior, "WritePipe failed");
@@ -120,22 +123,12 @@ private:
         }
         
         void reset(uint8_t pipeRef) {
-            _openIfNeeded();
             IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ResetPipe>(pipeRef);
             _CheckErr(ior, "ResetPipe failed");
         }
         
-    private:
-        void _openIfNeeded() {
-            if (_open) return;
-            // Open the interface
-            IOReturn ior = iokitExec<&IOUSBInterfaceInterface::USBInterfaceOpen>();
-            _CheckErr(ior, "USBInterfaceOpen failed");
-            _open = true;
-        }
-        
         _IOUSBInterfaceInterface _iokitInterface;
-        bool _open = false;
+        bool _claimed = false;
     };
     
 #elif __linux__
@@ -146,8 +139,6 @@ private:
     };
     
 #endif
-    
-public:
     
     // Copy: illegal
     USBDevice(const USBDevice& x) = delete;
@@ -327,8 +318,6 @@ public:
     USB::StringDescriptorMax stringDescriptor(uint8_t idx, uint16_t lang=USB::Language::English) {
         using namespace Endian;
         
-//        _openIfNeeded();
-        
         USB::StringDescriptorMax desc;
         IOUSBDevRequest req = {
             .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
@@ -344,27 +333,23 @@ public:
         return desc;
     }
     
-    void debugGetStatus() {
-        _openIfNeeded();
+    void claim() {
+        if (_claimed) return;
         
-        uint8_t status[2];
+        // Open the device
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
+        _CheckErr(ior, "USBDeviceOpen failed");
         
-        IOUSBDevRequest req = {
-            .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
-            .bRequest       = kUSBRqGetStatus,
-            .wValue         = 0,
-            .wIndex         = 0,
-            .wLength        = 2,
-            .pData          = status,
-        };
+        // Claim each interface
+        for (_Interface& iface : _interfaces) {
+            iface.claim();
+        }
         
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
-        _CheckErr(ior, "DeviceRequest failed");
+        _claimed = true;
     }
     
     template<typename... T_Args>
     auto read(uint8_t epAddr, T_Args&&... args) {
-        _openIfNeeded();
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         return iface.read(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -372,7 +357,6 @@ public:
     
     template<typename... T_Args>
     void write(uint8_t epAddr, T_Args&&... args) {
-        _openIfNeeded();
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.write(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -380,7 +364,6 @@ public:
     
     template<typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
-        _openIfNeeded();
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
         iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
@@ -392,8 +375,6 @@ public:
     }
     
     void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
-        _openIfNeeded();
-        
         if (timeout == Forever) {
             IOUSBDevRequest usbReq = {
                 .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
@@ -422,7 +403,22 @@ public:
     
     const SendRight& service() const { return _service; }
     
-private:
+    void debugGetStatus() {
+        uint8_t status[2];
+        
+        IOUSBDevRequest req = {
+            .bmRequestType  = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice),
+            .bRequest       = kUSBRqGetStatus,
+            .wValue         = 0,
+            .wIndex         = 0,
+            .wLength        = 2,
+            .pData          = status,
+        };
+        
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
+        _CheckErr(ior, "DeviceRequest failed");
+    }
+    
     struct _EndpointInfo {
         bool valid = false;
         uint8_t epAddr = 0;
@@ -445,32 +441,11 @@ private:
         return epInfo;
     }
     
-//    _Interface& _interfaceForEndpointAddr(uint8_t epAddr) {
-//        const uint8_t ifaceIdx = _ifaceIdxFromEp[_IdxForEndpointAddr(epAddr)];
-//        return _interfaces.at(ifaceIdx);
-//    }
-    public:
-    void open() {
-        if (_open) return;
-        // Open the device
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
-        _CheckErr(ior, "USBDeviceOpen failed");
-        _open = true;
-    }
-    
-    void _openIfNeeded() {
-//        if (_open) return;
-//        // Open the device
-//        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
-//        _CheckErr(ior, "USBDeviceOpen failed");
-//        _open = true;
-    }
-    
     SendRight _service;
     _IOUSBDeviceInterface _iokitInterface;
     std::vector<_Interface> _interfaces;
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount];
-    bool _open = false;
+    bool _claimed = false;
     
 #elif __linux__
     
@@ -633,7 +608,6 @@ private:
     
     operator libusb_device*() const { return _dev; }
     
-private:
     struct _EndpointInfo {
         bool valid = false;
         uint8_t epAddr = 0;
@@ -703,8 +677,6 @@ private:
     _EndpointInfo _epInfos[USB::Endpoint::MaxCount] = {};
     
 #endif
-    
-public:
     
     uint16_t maxPacketSize(uint8_t epAddr) const {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
