@@ -43,19 +43,22 @@ struct USBDevice {
         template<auto T_Fn, typename... T_Args>
         IOReturn iokitExec(T_Args&&... args) const {
             assert(_iokitInterface);
-            for (;;) {
-                const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
-                if (ior != kIOReturnAborted) return ior;
-            }
+            return ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//            for (;;) {
+//                const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//                if (ior != kIOReturnAborted) return ior;
+//            }
         }
         
         template<auto T_Fn, typename... T_Args>
         IOReturn iokitExec(T_Args&&... args) {
             assert(_iokitInterface);
-            for (;;) {
-                const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
-                if (ior != kIOReturnAborted) return ior;
-            }
+            return ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//            for (;;) {
+//                const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//                printf("ior=0x%jx\n", (uintmax_t)ior);
+//                if (ior != kIOReturnAborted) return ior;
+//            }
         }
         
         _Interface(SendRight&& service) {
@@ -168,19 +171,21 @@ struct USBDevice {
     template<auto T_Fn, typename... T_Args>
     IOReturn iokitExec(T_Args&&... args) const {
         assert(_iokitInterface);
-        for (;;) {
-            const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
-            if (ior != kIOReturnAborted) return ior;
-        }
+        return ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//        for (;;) {
+//            const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//            if (ior != kIOReturnAborted) return ior;
+//        }
     }
     
     template<auto T_Fn, typename... T_Args>
     IOReturn iokitExec(T_Args&&... args) {
         assert(_iokitInterface);
-        for (;;) {
-            const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
-            if (ior != kIOReturnAborted) return ior;
-        }
+        return ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//        for (;;) {
+//            const IOReturn ior = ((*_iokitInterface)->*T_Fn)(_iokitInterface, std::forward<T_Args>(args)...);
+//            if (ior != kIOReturnAborted) return ior;
+//        }
     }
     
     USBDevice(const SendRight& service) : _service(service) {
