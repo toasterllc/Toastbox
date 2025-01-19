@@ -124,10 +124,13 @@ struct TIFF {
     }
     
     void write(const std::filesystem::path& filePath) {
+        // Write the file atomically (write to a temp file, then rename)
+        const std::filesystem::path tmpFilePath = auto{filePath} += ".tmp";
         std::ofstream f;
         f.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-        f.open(filePath);
+        f.open(tmpFilePath);
         f.write((const char*)_data.data(), _data.size());
+        std::filesystem::rename(tmpFilePath, filePath);
     }
     
     std::vector<uint8_t> _data;
