@@ -15,15 +15,15 @@
 
 #define StaticPrint(x) _StaticPrint(Concat(_StaticPrint,__COUNTER__), x)
 
-// Until we can use C++23's std::to_underlying()
-namespace std {
-
-template<class Enum>
-constexpr std::underlying_type_t<Enum> to_underlying(Enum e) noexcept {
-    return static_cast<std::underlying_type_t<Enum>>(e);
-}
-
-} // namespace std
+//// Until we can use C++23's std::to_underlying()
+//namespace std {
+//
+//template<class Enum>
+//constexpr std::underlying_type_t<Enum> to_underlying(Enum e) noexcept {
+//    return static_cast<std::underlying_type_t<Enum>>(e);
+//}
+//
+//} // namespace std
 
 // C++20 std::cmp_less / std::cmp_greater / etc
 namespace std {
