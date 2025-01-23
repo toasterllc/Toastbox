@@ -123,14 +123,21 @@ struct TIFF {
         return (uint32_t)_data.size();
     }
     
-    void write(const std::filesystem::path& filePath) {
+    void write(const std::filesystem::path& filePath, const std::filesystem::path& tmpDir={}) {
         // Write the file atomically (write to a temp file, then rename)
-        const std::filesystem::path tmpFilePath = auto{filePath} += ".tmp";
-        std::ofstream f;
-        f.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-        f.open(tmpFilePath);
-        f.write((const char*)_data.data(), _data.size());
-        std::filesystem::rename(tmpFilePath, filePath);
+        const std::filesystem::path tmpFilePath = (!tmpDir.empty() ? (tmpDir / (filePath.filename() += ".tmp")) : std::filesystem::path{});
+        // Write the file
+        {
+            const std::filesystem::path streamPath = (!tmpFilePath.empty() ? tmpFilePath : filePath);
+            std::ofstream f;
+            f.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+            f.open(streamPath);
+            f.write((const char*)_data.data(), _data.size());
+        }
+        // If we wrote the file to `tmpDir`, move it into place
+        if (!tmpFilePath.empty()) {
+            std::filesystem::rename(tmpFilePath, filePath);
+        }
     }
     
     std::vector<uint8_t> _data;
