@@ -103,7 +103,12 @@ public:
     dev(MTLCreateSystemDefaultDevice()),
     _lib([dev newDefaultLibrary]),
     _commandQueue([dev newCommandQueue]),
-    _recycleBufs(std::make_shared<_RecycleBufs>()) {}
+    _recycleBufs(std::make_shared<_RecycleBufs>()) {
+        // Verify we were able to create our Metal members
+        assert(dev);
+        assert(_lib);
+        assert(_commandQueue);
+    }
     
     ~Renderer() {
         // When the renderer is destroyed, make sure that there are no resources that were waiting to be recycled.
