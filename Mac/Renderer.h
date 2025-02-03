@@ -266,11 +266,11 @@ public:
         [enc setFrontFacingWinding:MTLWindingCounterClockwise];
         [enc setCullMode:MTLCullModeNone];
         
-        std::apply([=] (const auto&... args) {
+        std::apply([=, this] (const auto&... args) {
             _SetBufferArgs(_ShaderType::Vertex, enc, 0, args...);
         }, vert.args);
         
-        std::apply([=] (const auto&... args) {
+        std::apply([=, this] (const auto&... args) {
             _SetBufferArgs(_ShaderType::Fragment, enc, 0, args...);
         }, frag.args);
         
@@ -293,7 +293,7 @@ public:
         id<MTLComputePipelineState> ps = _computePipelineState(kernel.fn);
         [enc setComputePipelineState:ps];
         
-        std::apply([=] (const auto&... args) {
+        std::apply([=, this] (const auto&... args) {
             _SetBufferArgs(enc, 0, args...);
         }, kernel.args);
         
