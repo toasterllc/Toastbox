@@ -17,8 +17,7 @@ namespace Toastbox {
 //   complete, calls rpop().
 
 template<typename T_Item, size_t T_Count, bool T_FullReset=false, auto T_Assert=nullptr>
-class Queue {
-public:
+struct Queue {
     // Read
     bool rok() const { return _w!=_r || _full; }
     
@@ -56,7 +55,6 @@ public:
         _full = T_FullReset;
     }
     
-private:
     T_Item _items[T_Count];
     size_t _w = 0;
     size_t _r = 0;
