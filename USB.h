@@ -96,20 +96,6 @@ namespace Endpoint {
         for (uint8_t ep : eps) count += In(ep);
         return count;
     }
-    
-    template<typename T_Speed, size_t N>
-    constexpr inline size_t MaxPacketSizeOut(const uint8_t (&eps)[N]) {
-        // Don't have OUT endpoints: MPS=control transfer MPS (64)
-        // Do have OUT endpoints: MPS=bulk transfer MPS (512, the only value that the spec allows for HS bulk endpoints)
-        return !CountOut(eps) ? T_Speed::MaxPacketSizeCtrl : T_Speed::MaxPacketSizeBulk;
-    }
-    
-    template<typename T_Speed, size_t N>
-    constexpr inline size_t MaxPacketSizeIn(const uint8_t (&eps)[N]) {
-        // Don't have IN endpoints: MPS=control transfer MPS (64)
-        // Do have IN endpoints: MPS=bulk transfer MPS (512, the only value that the spec allows for HS bulk endpoints)
-        return !CountIn(eps) ? T_Speed::MaxPacketSizeCtrl : T_Speed::MaxPacketSizeBulk;
-    }
 };
 
 // Endpoint Attributes (bmAttributes)
