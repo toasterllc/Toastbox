@@ -140,9 +140,9 @@ struct USBDevice {
             while (rem) {
                 const size_t chunkLen = std::min(chunkLenMax, rem);
                 uint32_t lenRead = (uint32_t)chunkLen;
-                printf("  ReadPipe(chunkLen=%ju)\n", (uintmax_t)chunkLen);
+//                printf("  ReadPipe(chunkLen=%ju)\n", (uintmax_t)chunkLen);
                 IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ReadPipe>(epInfo.pipeRef, buf8+off, &lenRead);
-                printf("  -> ior=0x%jx lenRead=%ju\n", (intmax_t)ior, (uintmax_t)lenRead);
+//                printf("  -> ior=0x%jx lenRead=%ju\n", (intmax_t)ior, (uintmax_t)lenRead);
                 _CheckErr(ior, "ReadPipe failed");
                 off += lenRead;
                 rem -= lenRead;
@@ -165,9 +165,9 @@ struct USBDevice {
             // do-while loop because we want a zero-length packet to be sent in the case that `len` == 0
             do {
                 const size_t chunkLen = std::min(chunkLenMax, rem);
-                printf("  WritePipe(chunkLen=%ju)\n", (uintmax_t)chunkLen);
+//                printf("  WritePipe(chunkLen=%ju)\n", (uintmax_t)chunkLen);
                 IOReturn ior = iokitExec<&IOUSBInterfaceInterface::WritePipe>(epInfo.pipeRef, buf8+off, (uint32_t)chunkLen);
-                printf("  -> ior=0x%jx\n", (intmax_t)ior);
+//                printf("  -> ior=0x%jx\n", (intmax_t)ior);
                 _CheckErr(ior, "WritePipe failed");
                 off += chunkLen;
                 rem -= chunkLen;
