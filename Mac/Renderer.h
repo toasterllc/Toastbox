@@ -99,9 +99,24 @@ public:
         return cs;
     }
     
+    static inline struct {
+        struct {
+            const void* data;
+            size_t len;
+        } metalLib;
+    } Config = {};
+    
+    static id<MTLLibrary> _MetalLibrary(id<MTLDevice> dev) {
+        if (Config.metalLib.data) {
+            dispatch_data_t data = dispatch_data_create(Config.metalLib.data, Config.metalLib.len, nullptr, nullptr);
+            return [dev newLibraryWithData:data error:nil];
+        }
+        return [dev newDefaultLibrary];
+    }
+    
     Renderer() :
     dev(MTLCreateSystemDefaultDevice()),
-    _lib([dev newDefaultLibrary]),
+    _lib(_MetalLibrary(dev)),
     _commandQueue([dev newCommandQueue]),
     _recycleBufs(std::make_shared<_RecycleBufs>()) {
         // Verify we were able to create our Metal members
