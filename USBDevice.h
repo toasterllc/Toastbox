@@ -27,6 +27,39 @@ struct USBDevice {
     using Milliseconds = std::chrono::milliseconds;
     static constexpr inline Milliseconds Forever = Milliseconds::max();
     
+    struct _EndpointInfo {
+        bool valid = false;
+        uint8_t epAddr = 0;
+        uint8_t ifaceIdx = 0;
+        uint8_t pipeRef = 0;
+        uint16_t maxPacketSize = 0;
+    };
+    
+    // We've observed hangs when trying to transfer more than 16383 packets with a single transfer,
+    // which is probably due to a hardware register overflowing in the host's USB controller.
+    //
+    // When we looked at the bus traffic, 16385 packets causes 1 packet to be transferred,
+    // 16386 causes 2 packets, and so on. So it seems that the overflowing  register is 14-bits wide.
+    //
+    // We think the bug is on the host side, not the device side, because the bus traffic shows
+    // that when the issue occurs, the host stops sending IN tokens, implying that the host believes
+    // that it received all the data that it expected.
+    //
+    // Configuration that triggers bug:
+    //     - ARM (Apple silicon) Mac
+    //     - Device connected via USB hub
+    //     - Device enumerates in USB full-speed mode (not high-speed)
+    //
+    // Other configurations:
+    //     - ARM Mac -> device                              : works
+    //     - ARM Mac -> Anyoyo hub -> device                : hang
+    //     - ARM Mac -> Sabrent hub -> device               : hang
+    //     - ARM Mac -> LG monitor -> device                : works
+    //     - ARM Mac -> LG monitor -> Anyoyo hub -> device  : works
+    //     - Intel Mac -> anything -> device                : works
+    
+    static constexpr inline size_t _PacketCountMax = 16383;
+    
 #if __APPLE__
     
     template<typename T>
@@ -92,41 +125,57 @@ struct USBDevice {
         }
         
         template<typename T>
-        void read(uint8_t pipeRef, T& t, Milliseconds timeout=Forever) {
-            const size_t len = read(pipeRef, (void*)&t, sizeof(t), timeout);
+        void read(const _EndpointInfo& epInfo, T& t) {
+            const size_t len = read(epInfo, (void*)&t, sizeof(t));
             if (len != sizeof(t)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
                 (uintmax_t)sizeof(t), (uintmax_t)len);
         }
         
-        size_t read(uint8_t pipeRef, void* buf, size_t len, Milliseconds timeout=Forever) {
-            uint32_t len32 = (uint32_t)len;
-            if (timeout == Forever) {
-                IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ReadPipe>(pipeRef, buf, &len32);
+        size_t read(const _EndpointInfo& epInfo, void* buf, size_t len) {
+            // See comment for _PacketCountMax
+            const size_t chunkLenMax = epInfo.maxPacketSize * _PacketCountMax;
+            uint8_t* buf8 = (uint8_t*)buf;
+            size_t off = 0;
+            size_t rem = len;
+            while (rem) {
+                const size_t chunkLen = std::min(chunkLenMax, rem);
+                uint32_t lenRead = (uint32_t)chunkLen;
+                printf("  ReadPipe(chunkLen=%ju)\n", (uintmax_t)chunkLen);
+                IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ReadPipe>(epInfo.pipeRef, buf8+off, &lenRead);
+                printf("  -> ior=0x%jx lenRead=%ju\n", (intmax_t)ior, (uintmax_t)lenRead);
                 _CheckErr(ior, "ReadPipe failed");
-            } else {
-                IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ReadPipeTO>(pipeRef, buf, &len32, 0, (uint32_t)timeout.count());
-                _CheckErr(ior, "ReadPipeTO failed");
+                off += lenRead;
+                rem -= lenRead;
+                if (lenRead < chunkLen) break;
             }
-            return len32;
+            return off;
         }
         
         template<typename T>
-        void write(uint8_t pipeRef, T& x, Milliseconds timeout=Forever) {
-            write(pipeRef, (void*)&x, sizeof(x), timeout);
+        void write(const _EndpointInfo& epInfo, T& x) {
+            write(epInfo, (void*)&x, sizeof(x));
         }
         
-        void write(uint8_t pipeRef, const void* buf, size_t len, Milliseconds timeout=Forever) {
-            if (timeout == Forever) {
-                IOReturn ior = iokitExec<&IOUSBInterfaceInterface::WritePipe>(pipeRef, (void*)buf, (uint32_t)len);
+        void write(const _EndpointInfo& epInfo, const void* buf, size_t len) {
+            // See comment for _PacketCountMax
+            const size_t chunkLenMax = epInfo.maxPacketSize * _PacketCountMax;
+            uint8_t* buf8 = (uint8_t*)buf;
+            size_t off = 0;
+            size_t rem = len;
+            // do-while loop because we want a zero-length packet to be sent in the case that `len` == 0
+            do {
+                const size_t chunkLen = std::min(chunkLenMax, rem);
+                printf("  WritePipe(chunkLen=%ju)\n", (uintmax_t)chunkLen);
+                IOReturn ior = iokitExec<&IOUSBInterfaceInterface::WritePipe>(epInfo.pipeRef, buf8+off, (uint32_t)chunkLen);
+                printf("  -> ior=0x%jx\n", (intmax_t)ior);
                 _CheckErr(ior, "WritePipe failed");
-            } else {
-                IOReturn ior = iokitExec<&IOUSBInterfaceInterface::WritePipeTO>(pipeRef, (void*)buf, (uint32_t)len, 0, (uint32_t)timeout.count());
-                _CheckErr(ior, "WritePipeTO failed");
-            }
+                off += chunkLen;
+                rem -= chunkLen;
+            } while (rem);
         }
         
-        void reset(uint8_t pipeRef) {
-            IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ResetPipe>(pipeRef);
+        void reset(const _EndpointInfo& epInfo) {
+            IOReturn ior = iokitExec<&IOUSBInterfaceInterface::ResetPipe>(epInfo.pipeRef);
             _CheckErr(ior, "ResetPipe failed");
         }
         
@@ -357,53 +406,38 @@ struct USBDevice {
     auto read(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        return iface.read(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        return iface.read(epInfo, std::forward<T_Args>(args)...);
     }
     
     template<typename... T_Args>
     void write(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.write(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        iface.write(epInfo, std::forward<T_Args>(args)...);
     }
     
     template<typename... T_Args>
     void reset(uint8_t epAddr, T_Args&&... args) {
         const _EndpointInfo& epInfo = _epInfo(epAddr);
         _Interface& iface = _interfaces.at(epInfo.ifaceIdx);
-        iface.reset(epInfo.pipeRef, std::forward<T_Args>(args)...);
+        iface.reset(epInfo, std::forward<T_Args>(args)...);
     }
     
     template<typename T>
-    void vendorRequestOut(uint8_t req, const T& x, Milliseconds timeout=Forever) {
-        vendorRequestOut(req, (const void*)&x, sizeof(x), timeout);
+    void vendorRequestOut(uint8_t req, const T& x) {
+        vendorRequestOut(req, (const void*)&x, sizeof(x));
     }
     
-    void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
-        if (timeout == Forever) {
-            IOUSBDevRequest usbReq = {
-                .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
-                .bRequest           = req,
-                .pData              = (void*)data,
-                .wLength            = (uint16_t)len,
-            };
-            
-            IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
-            _CheckErr(ior, "DeviceRequest failed");
+    void vendorRequestOut(uint8_t req, const void* data, size_t len) {
+        IOUSBDevRequest usbReq = {
+            .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
+            .bRequest           = req,
+            .pData              = (void*)data,
+            .wLength            = (uint16_t)len,
+        };
         
-        } else {
-            IOUSBDevRequestTO usbReq = {
-                .bmRequestType      = USBmakebmRequestType(kUSBOut, kUSBVendor, kUSBDevice),
-                .bRequest           = req,
-                .pData              = (void*)data,
-                .wLength            = (uint16_t)len,
-                .noDataTimeout      = (uint32_t)0,
-                .completionTimeout  = (uint32_t)timeout.count()
-            };
-            
-            IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequestTO>(&usbReq);
-            _CheckErr(ior, "DeviceRequestTO failed");
-        }
+        IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&usbReq);
+        _CheckErr(ior, "DeviceRequest failed");
     }
     
     const SendRight& service() const { return _service; }
@@ -423,14 +457,6 @@ struct USBDevice {
         IOReturn ior = iokitExec<&IOUSBDeviceInterface::DeviceRequest>(&req);
         _CheckErr(ior, "DeviceRequest failed");
     }
-    
-    struct _EndpointInfo {
-        bool valid = false;
-        uint8_t epAddr = 0;
-        uint8_t ifaceIdx = 0;
-        uint8_t pipeRef = 0;
-        uint16_t maxPacketSize = 0;
-    };
     
     static uint8_t _IdxForEndpointAddr(uint8_t epAddr) {
         return ((epAddr&USB::Endpoint::DirectionMask)>>3) | (epAddr&USB::Endpoint::IndexMask);
@@ -554,32 +580,30 @@ struct USBDevice {
     }
     
     template<typename T_Dst>
-    void read(uint8_t epAddr, T_Dst& dst, Milliseconds timeout=Forever) {
-        const size_t len = read(epAddr, (void*)&dst, sizeof(dst), timeout);
+    void read(uint8_t epAddr, T_Dst& dst) {
+        const size_t len = read(epAddr, (void*)&dst, sizeof(dst));
         if (len != sizeof(dst)) throw RuntimeError("read() didn't read enough data (needed %ju bytes, got %ju bytes)",
             (uintmax_t)sizeof(dst), (uintmax_t)len);
     }
     
-    size_t read(uint8_t epAddr, void* buf, size_t len, Milliseconds timeout=Forever) {
+    size_t read(uint8_t epAddr, void* buf, size_t len) {
         _claimInterfaceForEndpointAddr(epAddr);
         int xferLen = 0;
-        int ir = libusb_bulk_transfer(_handle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
-            _LibUSBTimeoutFromMs(timeout));
+        int ir = libusb_bulk_transfer(_handle, epAddr, (uint8_t*)buf, (int)len, &xferLen, 0);
         _CheckErr(ir, "libusb_bulk_transfer failed");
         return xferLen;
     }
     
     template<typename T_Src>
-    void write(uint8_t epAddr, T_Src& src, Milliseconds timeout=Forever) {
-        write(epAddr, (void*)&src, sizeof(src), timeout);
+    void write(uint8_t epAddr, T_Src& src) {
+        write(epAddr, (void*)&src, sizeof(src));
     }
     
-    void write(uint8_t epAddr, const void* buf, size_t len, Milliseconds timeout=Forever) {
+    void write(uint8_t epAddr, const void* buf, size_t len) {
         _claimInterfaceForEndpointAddr(epAddr);
         
         int xferLen = 0;
-        int ir = libusb_bulk_transfer(_handle, epAddr, (uint8_t*)buf, (int)len, &xferLen,
-            _LibUSBTimeoutFromMs(timeout));
+        int ir = libusb_bulk_transfer(_handle, epAddr, (uint8_t*)buf, (int)len, &xferLen, 0);
         _CheckErr(ir, "libusb_bulk_transfer failed");
         if ((size_t)xferLen != len)
             throw RuntimeError("libusb_bulk_transfer short write (tried: %zu, got: %zu)", len, (size_t)xferLen);
@@ -592,11 +616,11 @@ struct USBDevice {
     }
     
     template<typename T>
-    void vendorRequestOut(uint8_t req, const T& x, Milliseconds timeout=Forever) {
-        vendorRequestOut(req, (void*)&x, sizeof(x), timeout);
+    void vendorRequestOut(uint8_t req, const T& x) {
+        vendorRequestOut(req, (void*)&x, sizeof(x));
     }
     
-    void vendorRequestOut(uint8_t req, const void* data, size_t len, Milliseconds timeout=Forever) {
+    void vendorRequestOut(uint8_t req, const void* data, size_t len) {
         _openIfNeeded();
         
         const uint8_t bmRequestType =
@@ -607,7 +631,7 @@ struct USBDevice {
         const uint8_t wValue = 0;
         const uint8_t wIndex = 0;
         int ir = libusb_control_transfer(_handle, bmRequestType, bRequest, wValue, wIndex,
-            (uint8_t*)data, len, _LibUSBTimeoutFromMs(timeout));
+            (uint8_t*)data, len, 0);
         _CheckErr(ir, "libusb_control_transfer failed");
     }
     
@@ -632,12 +656,6 @@ struct USBDevice {
     
     static uint8_t _IdxForEndpointAddr(uint8_t epAddr) {
         return ((epAddr&USB::Endpoint::DirectionMask)>>3) | (epAddr&USB::Endpoint::IndexMask);
-    }
-    
-    static unsigned int _LibUSBTimeoutFromMs(Milliseconds timeout) {
-        if (timeout == Forever) return 0;
-        else if (timeout == Milliseconds::zero()) return 1;
-        else return timeout.count();
     }
     
     static void _CheckErr(int ir, const char* errMsg) {
