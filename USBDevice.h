@@ -388,12 +388,24 @@ struct USBDevice {
         return desc;
     }
     
-    void claim() {
+    void claim(uint32_t attempts=1) {
+        assert(attempts);
         if (_claimed) return;
         
-        // Open the device
-        IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
-        _CheckErr(ior, "USBDeviceOpen failed");
+        constexpr auto AttemptDelay = std::chrono::milliseconds(500);
+        while (attempts--) {
+            try {
+                // Open the device
+                IOReturn ior = iokitExec<&IOUSBDeviceInterface::USBDeviceOpen>();
+                _CheckErr(ior, "USBDeviceOpen failed");
+            
+            } catch (const Toastbox::KernError& e) {
+                if (e.kr != kIOReturnExclusiveAccess) throw;
+                if (!attempts) throw;
+                printf("[USBDevice : claim] Failed to claim device; trying again (%s)\n", e.what());
+                std::this_thread::sleep_for(AttemptDelay);
+            }
+        }
         
         // Claim each interface
         for (_Interface& iface : _interfaces) {
