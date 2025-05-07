@@ -14,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <cassert>
+#include <thread>
 #include "USB.h"
 #include "RefCounted.h"
 #include "Uniqued.h"
