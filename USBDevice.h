@@ -18,6 +18,7 @@
 #include "RefCounted.h"
 #include "Uniqued.h"
 #include "RuntimeError.h"
+#include "KernError.h"
 #include "Defer.h"
 
 namespace Toastbox {
@@ -204,7 +205,7 @@ struct USBDevice {
         std::vector<USBDevicePtr> devices;
         io_iterator_t ioServicesIter = MACH_PORT_NULL;
         kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, IOServiceMatching(kIOUSBDeviceClassName), &ioServicesIter);
-        if (kr != KERN_SUCCESS) throw RuntimeError("IOServiceGetMatchingServices failed: 0x%x", kr);
+        if (kr != KERN_SUCCESS) throw KernError(kr, "IOServiceGetMatchingServices failed");
         
         SendRight servicesIter(SendRight::NoRetain, ioServicesIter);
         while (servicesIter) {
@@ -463,7 +464,7 @@ struct USBDevice {
     }
     
     static void _CheckErr(IOReturn ior, const char* errMsg) {
-        if (ior != kIOReturnSuccess) throw RuntimeError("%s: %s", errMsg, mach_error_string(ior));
+        if (ior != kIOReturnSuccess) throw KernError(ior, "%s", errMsg);
     }
     
     const _EndpointInfo& _epInfo(uint8_t epAddr) const {
