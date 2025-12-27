@@ -25,7 +25,9 @@
 //
 //} // namespace std
 
-// C++20 std::cmp_less / std::cmp_greater / etc
+// Our own implementation of C++20 std::cmp_less / std::cmp_greater / etc
+#if __cplusplus <= 201703L
+
 namespace std {
 
 template< class T, class U >
@@ -80,7 +82,7 @@ constexpr bool cmp_greater_equal( T t, U u ) noexcept
 
 } // namespace std
 
-// C++20 std::in_range
+// Our own implementation of C++20 std::in_range
 namespace std {
 
 template< class R, class T >
@@ -91,6 +93,8 @@ constexpr bool in_range( T t ) noexcept
 }
 
 } // namespace std
+
+#endif // __cplusplus <= 201703L
 
 namespace Toastbox {
 
