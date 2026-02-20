@@ -9,8 +9,7 @@ extern "C"
 [[noreturn, gnu::used]]
 void Abort(uintptr_t addr);
 
-[[noreturn]]
-[[gnu::always_inline]]
+[[noreturn, gnu::always_inline]]
 inline void _Abort() {
 __Abort:
 #if defined(__MSP430__) && !defined(__LARGE_CODE_MODEL__)
