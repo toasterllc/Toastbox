@@ -28,15 +28,20 @@ typename T_Src,
 typename = std::enable_if_t<std::is_integral<T_Dst>::value>,
 typename = std::enable_if_t<std::is_integral<T_Src>::value>
 >
-T_Dst Cast(const T_Src& x) {
-    if (!std::in_range<T_Dst>(x)) {
+T_Dst Cast(const T_Src& src) {
+    if (!std::in_range<T_Dst>(src)) {
         std::stringstream ss;
-        ss << "can't represent value " << x << " using type with range [" <<
+        ss << "can't represent value " << src << " using type with range [" <<
             std::to_string(std::numeric_limits<T_Dst>::min()) << "," <<
             std::to_string(std::numeric_limits<T_Dst>::max()) << "]";
         throw std::overflow_error(ss.str().c_str());
     }
-    return static_cast<T_Dst>(x);
+    return static_cast<T_Dst>(src);
+}
+
+template<typename T_Dst, typename T_Src>
+void Cast(T_Dst& dst, const T_Src& src) {
+    dst = Cast<T_Dst>(src);
 }
 
 } // namespace Toastbox
