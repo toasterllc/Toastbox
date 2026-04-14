@@ -12,8 +12,10 @@ struct RuntimeError : std::runtime_error {
 
     template<typename ...Args>
     static std::string _RuntimeErrorFmtMsg(const char* fmt, Args&&... args) {
-        char msg[512];
-        snprintf(msg, sizeof(msg), fmt, std::forward<Args>(args)...);
+        constexpr size_t Cap = 512;
+        std::string msg;
+        msg.reserve(Cap);
+        snprintf(msg.data(), msg.capacity(), fmt, std::forward<Args>(args)...);
         return msg;
     }
     
