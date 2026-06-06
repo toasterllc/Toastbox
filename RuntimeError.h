@@ -9,13 +9,14 @@ struct RuntimeError : std::runtime_error {
     static std::string _RuntimeErrorFmtMsg(const char* str) {
         return str;
     }
-
+    
     template<typename ...Args>
     static std::string _RuntimeErrorFmtMsg(const char* fmt, Args&&... args) {
         constexpr size_t Cap = 512;
-        std::string msg;
-        msg.reserve(Cap);
-        snprintf(msg.data(), msg.capacity(), fmt, std::forward<Args>(args)...);
+        std::string msg(Cap-1, '\0'); // string capacity = (Cap-1)+1 = 512
+        int ir = snprintf(msg.data(), Cap, fmt, std::forward<Args>(args)...);
+        assert(ir >= 0);
+        msg.resize(ir);
         return msg;
     }
     
