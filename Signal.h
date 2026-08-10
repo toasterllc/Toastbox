@@ -4,8 +4,7 @@
 
 namespace Toastbox {
 
-class Signal {
-public:
+struct Signal {
     struct Stop : std::exception {};
     
     template<typename T_Cond>
@@ -57,7 +56,6 @@ public:
         stop(std::unique_lock(_lock), x);
     }
     
-private:
     std::mutex _lock;
     std::condition_variable _cv;
     bool _stop = false;
