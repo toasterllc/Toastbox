@@ -1,7 +1,7 @@
 #pragma once
 #include <optional>
 
-template<typename T, auto FreeFn>
+template<typename T, auto T_FreeFn>
 class Uniqued {
 public:
     // Default constructor: empty
@@ -17,7 +17,7 @@ public:
     // Move assignment operator
     Uniqued& operator=(Uniqued&& x) { swap(x); return *this; }
     
-    ~Uniqued() { if (_t) FreeFn(*_t); }
+    ~Uniqued() { if (_t) T_FreeFn(*_t); }
     
     operator T&() {
         assert(_t);
@@ -34,9 +34,16 @@ public:
     
     void reset() {
         if (_t) {
-            FreeFn(*_t);
+            T_FreeFn(*_t);
             _t = std::nullopt;
         }
+    }
+    
+    // reset(NoFree): clears without calling T_FreeFn
+    struct NoFreeType {};
+    static constexpr inline NoFreeType NoFree = {};
+    void reset(NoFreeType) {
+        _t = std::nullopt;
     }
     
     void swap(Uniqued& x) {
